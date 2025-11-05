@@ -1,41 +1,93 @@
-.PHONY: build up down restart logs clean pdm-install
+.PHONY: help build run run-bg stop logs deps test test-coverage fmt vet lint security clean db-reset all
 
-# Build the Docker images
-build:
-	docker-compose build
+# Root-level Makefile to manage the Go app in joles/
 
-# Start the services in the background
-up:
-	docker-compose up -d
+GO_DIR ?= joles
+BIN_NAME ?= lio-ai
+BIN_PATH := $(GO_DIR)/$(BIN_NAME)
 
-# Stop the services
-down:
-	docker-compose down
+GOCMD := go
+GOBUILD := $(GOCMD) build
+GOCLEAN := $(GOCMD) clean
+GOTEST := $(GOCMD) test
+GOMOD := $(GOCMD) mod
 
-# Restart the services
-restart: down up
+VERSION ?= 0.1.0
+BUILD_TIME := $(shell date -u '+%Y-%m-%d_%H:%M:%S')
+GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
-# View the logs of all services
-logs:
-	docker-compose logs -f
+PID_FILE := $(GO_DIR)/server.pid
+LOG_FILE := logs/server.log
+ROOT_DIR := $(CURDIR)
 
-# Remove containers, networks, volumes, and images created by `up`
-clean:
-	docker-compose down -v
-	docker system prune -f
-	rm -rf ./uploads  # Optional: clean any local directory
+help: ## Display this help screen
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-# Install dependencies using PDM inside the Docker container
-pdm-install:
-	docker-compose run --rm app pdm install
+build: ## Build the Go gateway binary
+	cd $(GO_DIR) && $(GOBUILD) -o $(BIN_NAME) ./cmd/server
 
-# Enter the app container for interactive use
-shell:
-	docker-compose run --rm app /bin/sh
+run: build ## Run the gateway in the foreground
+	set -a; [ -f $(ROOT_DIR)/.env ] && . $(ROOT_DIR)/.env; set +a; \
+	$(BIN_PATH)
 
-# Run the main application
-run-app:
-	docker-compose run --rm app pdm run python app/main.py
+run-bg: build ## Run the gateway in the background (logs/server.log; PID in joles/server.pid)
+	@mkdir -p logs
+	@if [ -f $(PID_FILE) ] && kill -0 $$(cat $(PID_FILE)) 2>/dev/null; then \
+		echo "Server already running with PID $$(cat $(PID_FILE))"; \
+	else \
+		set -a; [ -f $(ROOT_DIR)/.env ] && . $(ROOT_DIR)/.env; set +a; \
+		nohup $(BIN_PATH) >> $(ROOT_DIR)/$(LOG_FILE) 2>&1 & echo $$! > $(ROOT_DIR)/$(PID_FILE); \
+		echo "Started server PID $$(cat $(PID_FILE)) (logging to $(LOG_FILE))"; \
+	fi
 
-# Rebuild and run the services
-rebuild: clean build up
+stop: ## Stop the background gateway if running
+	@if [ -f $(PID_FILE) ]; then \
+		PID=$$(cat $(PID_FILE)); \
+		if kill -0 $$PID 2>/dev/null; then \
+			kill $$PID && echo "Stopped PID $$PID"; \
+		else \
+			echo "No running process with PID $$PID"; \
+		fi; \
+		rm -f $(PID_FILE); \
+	else \
+		echo "No PID file found"; \
+	fi
+
+logs: ## Tail the server log
+	@mkdir -p logs
+	tail -f $(LOG_FILE)
+
+deps: ## Download and verify Go dependencies
+	cd $(GO_DIR) && $(GOMOD) tidy && $(GOMOD) verify
+
+test: ## Run Go tests
+	cd $(GO_DIR) && $(GOTEST) -v ./...
+
+test-coverage: ## Run tests with coverage report
+	cd $(GO_DIR) && $(GOTEST) -cover -coverprofile=coverage.out ./...
+	$(GOCMD) tool cover -html=$(GO_DIR)/coverage.out -o $(GO_DIR)/coverage.html
+	@echo "Coverage report: $(GO_DIR)/coverage.html"
+
+fmt: ## Format Go code
+	cd $(GO_DIR) && $(GOCMD) fmt ./...
+
+vet: ## Run go vet
+	cd $(GO_DIR) && $(GOCMD) vet ./...
+
+lint: ## Run golangci-lint (if installed)
+	cd $(GO_DIR) && golangci-lint run ./...
+
+security: ## Run gosec (if installed)
+	cd $(GO_DIR) && gosec ./...
+
+clean: ## Clean build artifacts and temp files
+	cd $(GO_DIR) && $(GOCLEAN)
+	rm -f $(BIN_PATH) $(GO_DIR)/coverage.out $(GO_DIR)/coverage.html $(PID_FILE)
+
+db-reset: ## Remove local SQLite DB (data/lio.db)
+	rm -f data/lio.db
+	@echo "Removed data/lio.db"
+
+all: clean deps fmt vet build test ## Full cycle: clean, deps, format, vet, build, test
+
+.DEFAULT_GOAL := help
