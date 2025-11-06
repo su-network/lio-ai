@@ -53,6 +53,23 @@ func (h *ChatHandler) GetChat(c *gin.Context) {
 	c.JSON(http.StatusOK, chat)
 }
 
+// GetChatByUUID handles GET /api/v1/chats/uuid/:uuid
+func (h *ChatHandler) GetChatByUUID(c *gin.Context) {
+	uuid := c.Param("uuid")
+	if uuid == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid chat uuid"})
+		return
+	}
+
+	chat, err := h.service.GetChatByUUID(uuid)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, chat)
+}
+
 // GetUserChats handles GET /api/v1/chats?user_id=xxx
 func (h *ChatHandler) GetUserChats(c *gin.Context) {
 	userID := c.Query("user_id")
@@ -140,6 +157,29 @@ func (h *ChatHandler) SendMessage(c *gin.Context) {
 	c.JSON(http.StatusCreated, message)
 }
 
+// SendMessageByUUID handles POST /api/v1/chats/uuid/:uuid/messages
+func (h *ChatHandler) SendMessageByUUID(c *gin.Context) {
+	uuid := c.Param("uuid")
+	if uuid == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid chat uuid"})
+		return
+	}
+
+	var req models.MessageRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	message, err := h.service.SendMessageByUUID(uuid, req.Role, req.Content, req.Model)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, message)
+}
+
 // GetMessages handles GET /api/v1/chats/:id/messages
 func (h *ChatHandler) GetMessages(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
@@ -149,6 +189,26 @@ func (h *ChatHandler) GetMessages(c *gin.Context) {
 	}
 
 	messages, err := h.service.GetChatMessages(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": messages,
+		"total": len(messages),
+	})
+}
+
+// GetMessagesByUUID handles GET /api/v1/chats/uuid/:uuid/messages
+func (h *ChatHandler) GetMessagesByUUID(c *gin.Context) {
+	uuid := c.Param("uuid")
+	if uuid == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid chat uuid"})
+		return
+	}
+
+	messages, err := h.service.GetChatMessagesByUUID(uuid)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return

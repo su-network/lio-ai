@@ -48,8 +48,17 @@ func main() {
 
 	// Initialize repositories, services, and handlers
 	docRepo := repositories.NewDocumentRepository(database.GetConnection())
+	chatRepo := repositories.NewChatRepository(database.GetConnection())
+	usageRepo := repositories.NewUsageRepository(database.GetConnection())
+	
 	docService := services.NewDocumentService(docRepo)
+	chatService := services.NewChatService(chatRepo)
+	usageService := services.NewUsageService(usageRepo)
+	
 	docHandler := handlers.NewDocumentHandler(docService)
+	chatHandler := handlers.NewChatHandler(chatService)
+	usageHandler := handlers.NewUsageHandler(usageService)
+	systemHandler := handlers.NewSystemHandler(database.GetConnection())
 
 	// Initialize proxy handler for FastAPI backend
 	backendURL := os.Getenv("BACKEND_URL")
@@ -68,11 +77,12 @@ func main() {
 	})
 
 	// Health check with backend verification
-	router.GET("/health", proxyHandler.HealthCheck)
+	router.GET("/health", systemHandler.HealthCheck)
 
-	// Document API routes (direct)
+	// API routes
 	api := router.Group("/api/v1")
 	{
+		// Document routes
 		documents := api.Group("/documents")
 		{
 			documents.POST("", docHandler.CreateDocument)
@@ -80,6 +90,41 @@ func main() {
 			documents.GET("/:id", docHandler.GetDocument)
 			documents.PUT("/:id", docHandler.UpdateDocument)
 			documents.DELETE("/:id", docHandler.DeleteDocument)
+		}
+
+		// Chat routes
+		chats := api.Group("/chats")
+		{
+			chats.POST("", chatHandler.CreateChat)
+			chats.GET("", chatHandler.GetUserChats)
+			chats.GET("/:id", chatHandler.GetChat)
+			chats.PUT("/:id", chatHandler.UpdateChat)
+			chats.DELETE("/:id", chatHandler.DeleteChat)
+			chats.POST("/:id/messages", chatHandler.SendMessage)
+			chats.GET("/:id/messages", chatHandler.GetMessages)
+			
+			// UUID-based routes
+			chats.GET("/uuid/:uuid", chatHandler.GetChatByUUID)
+			chats.POST("/uuid/:uuid/messages", chatHandler.SendMessageByUUID)
+			chats.GET("/uuid/:uuid/messages", chatHandler.GetMessagesByUUID)
+		}
+
+		// Usage routes
+		usage := api.Group("/usage")
+		{
+			usage.GET("/quota", usageHandler.GetQuotaStatus)
+			usage.GET("/summary", usageHandler.GetUsageSummary)
+			usage.POST("/track", usageHandler.TrackUsage)
+			usage.POST("/check-quota", usageHandler.CheckQuota)
+			usage.GET("/dashboard", usageHandler.GetDashboard)
+		}
+
+		// System routes
+		system := api.Group("/system")
+		{
+			system.GET("/metrics", systemHandler.GetMetrics)
+			system.GET("/info", systemHandler.GetInfo)
+			system.GET("/stats", systemHandler.GetStats)
 		}
 	}
 

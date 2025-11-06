@@ -7,6 +7,7 @@ type Chat struct {
 	ID        int64     `json:"id"`
 	UserID    string    `json:"user_id"`
 	Title     string    `json:"title"`
+	ChatUUID  string    `json:"chat_uuid"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -17,7 +18,7 @@ type Message struct {
 	ChatID    int64     `json:"chat_id"`
 	Role      string    `json:"role"` // "user", "assistant", "system"
 	Content   string    `json:"content"`
-	Model     string    `json:"model,omitempty"`
+	Model     *string   `json:"model,omitempty"`
 	Tokens    int       `json:"tokens,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 }
@@ -53,11 +54,11 @@ type ChatCompletionRequest struct {
 
 // ChatCompletionResponse represents the response from chat completion
 type ChatCompletionResponse struct {
-	ChatID    int64   `json:"chat_id"`
-	MessageID int64   `json:"message_id"`
-	Role      string  `json:"role"`
-	Content   string  `json:"content"`
-	Model     string  `json:"model"`
-	Tokens    int     `json:"tokens"`
+	ChatID    int64     `json:"chat_id"`
+	MessageID int64     `json:"message_id"`
+	Role      string    `json:"role"`
+	Content   string    `json:"content"`
+	Model     *string   `json:"model,omitempty"`
+	Tokens    int       `json:"tokens"`
 	CreatedAt time.Time `json:"created_at"`
 }
