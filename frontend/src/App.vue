@@ -1,0 +1,374 @@
+<template>
+  <div id="app" class="min-h-screen bg-gray-50 dark:bg-gray-900 flex">
+    <!-- Mobile Menu Button -->
+    <button
+      v-if="userStore.isLoggedIn && isSidebarCollapsed"
+      @click="isSidebarCollapsed = false"
+      class="fixed top-4 left-4 z-40 p-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 md:hidden"
+      aria-label="Open menu"
+    >
+      <Menu class="w-5 h-5 text-gray-600 dark:text-gray-400" />
+    </button>
+
+    <!-- Sidebar -->
+    <aside v-if="userStore.isLoggedIn" :class="[
+      'bg-white dark:bg-gray-800 shadow-lg border-r border-gray-200 dark:border-gray-700 transition-all duration-300 ease-in-out flex flex-col',
+      isSidebarCollapsed ? 'w-16' : 'w-64',
+      'fixed md:relative inset-y-0 left-0 z-50 md:z-auto',
+      isSidebarCollapsed ? '-translate-x-full md:translate-x-0' : 'translate-x-0'
+    ]">
+      <!-- Logo and Toggle button at the very top -->
+      <div class="p-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+        <!-- Logo -->
+        <router-link
+          to="/"
+          v-if="!isSidebarCollapsed"
+          class="flex items-center space-x-3 transition-all duration-300"
+        >
+          <div class="w-9 h-9 bg-gradient-to-br from-slate-600 to-slate-700 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
+            <span class="text-white font-bold text-base">L</span>
+          </div>
+          <span class="text-xl font-bold text-gray-900 dark:text-white tracking-tight whitespace-nowrap">Lio AI</span>
+        </router-link>
+        
+        <!-- Logo when collapsed - clicking opens sidebar -->
+        <button 
+          v-if="isSidebarCollapsed"
+          @click="toggleSidebar"
+          class="w-9 h-9 bg-gradient-to-br from-slate-600 to-slate-700 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0 mx-auto hover:scale-105 transition-transform"
+          aria-label="Open sidebar"
+        >
+          <span class="text-white font-bold text-base">L</span>
+        </button>
+
+        <!-- Toggle button - only visible when expanded -->
+        <button
+          v-if="!isSidebarCollapsed"
+          @click="toggleSidebar"
+          class="p-2 rounded-lg transition-colors flex-shrink-0"
+          aria-label="Toggle sidebar"
+        >
+          <ChevronLeft class="w-5 h-5 text-gray-600 dark:text-gray-400" />
+        </button>
+      </div>
+
+      <div class="p-4 flex-1 flex flex-col overflow-hidden">
+        <!-- New Chat Button -->
+        <button
+          @click="createNewChat"
+          :class="[
+            'flex items-center px-4 py-3 mb-4 rounded-xl font-medium text-sm transition-all duration-200 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700',
+            isSidebarCollapsed ? 'justify-center px-2' : 'space-x-3'
+          ]"
+        >
+          <PenSquare class="w-5 h-5 flex-shrink-0" />
+          <span
+            :class="[
+              'transition-all duration-300 whitespace-nowrap',
+              isSidebarCollapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'
+            ]"
+          >
+            New Chat
+          </span>
+        </button>
+
+        <!-- Recent Chats List -->
+        <div class="flex-1 overflow-y-auto">
+          <div class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3 px-4" v-if="!isSidebarCollapsed">Recent Chats</div>
+          <ul class="space-y-1">
+            <li v-for="convo in chatStore && Array.isArray(chatStore.recentConversations) ? chatStore.recentConversations : []" :key="convo.id" class="group">
+              <div
+                :class="[
+                  'w-full flex items-center rounded-xl text-sm transition-all duration-200',
+                  isSidebarCollapsed ? 'justify-center p-2.5' : 'px-4 py-2.5'
+                ]"
+              >
+                <!-- Edit mode -->
+                <div v-if="editingConvoId === convo.id && !isSidebarCollapsed" class="flex items-center space-x-2 flex-1">
+                  <input
+                    v-model="editingTitle"
+                    @keydown.enter="saveEdit"
+                    @keydown.esc="cancelEdit"
+                    ref="editInput"
+                    class="flex-1 px-2 py-1 text-sm bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white rounded border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-400"
+                  />
+                  <button
+                    @click="saveEdit"
+                    class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                    title="Save"
+                  >
+                    <Check class="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
+                  </button>
+                  <button
+                    @click="cancelEdit"
+                    class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                    title="Cancel"
+                  >
+                    <X class="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" />
+                  </button>
+                </div>
+                
+                <!-- Normal mode -->
+                <template v-else>
+                  <button
+                    @click="chatStore.selectConversation(convo.id); $router.push('/')"
+                    :class="[
+                      'flex items-center flex-1 text-gray-700 dark:text-gray-300',
+                      isSidebarCollapsed ? 'justify-center' : 'space-x-2'
+                    ]"
+                    :title="isSidebarCollapsed ? convo.title : ''"
+                  >
+                    <MessageSquare v-if="isSidebarCollapsed" class="w-4 h-4 flex-shrink-0" />
+                    <span v-else class="truncate flex-1 text-left">{{ convo.title }}</span>
+                  </button>
+                  
+                  <!-- Action buttons - only visible when not collapsed -->
+                  <div v-if="!isSidebarCollapsed" class="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      @click.stop="startEdit(convo)"
+                      class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                      title="Edit conversation"
+                    >
+                      <Edit class="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" />
+                    </button>
+                    <button
+                      @click.stop="confirmDelete(convo)"
+                      class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                      title="Delete conversation"
+                    >
+                      <Trash2 class="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" />
+                    </button>
+                  </div>
+                </template>
+              </div>
+            </li>
+            <li v-if="(!chatStore || !Array.isArray(chatStore.recentConversations) || chatStore.recentConversations.length === 0) && !isSidebarCollapsed">
+              <div class="text-gray-400 text-xs px-4 py-2">No recent chats. Start a new conversation!</div>
+            </li>
+          </ul>
+        </div>
+      </div>
+      
+      <!-- User Profile and Settings -->
+      <div class="p-4 border-t border-gray-200 dark:border-gray-700">
+        <nav class="space-y-1">
+          <router-link
+            to="/settings"
+            :class="[
+              'flex items-center px-4 py-3 rounded-xl font-medium text-sm transition-all duration-200 text-gray-700 dark:text-gray-300',
+              isSidebarCollapsed ? 'justify-center' : 'space-x-3'
+            ]"
+          >
+            <Settings class="w-5 h-5 flex-shrink-0" />
+            <span
+              :class="[
+                'transition-all duration-300 whitespace-nowrap',
+                isSidebarCollapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'
+              ]"
+            >
+              Settings
+            </span>
+          </router-link>
+        </nav>
+        <div :class="[
+          'flex items-center mt-4',
+          isSidebarCollapsed ? 'justify-center' : 'px-4 py-2'
+        ]">
+          <router-link to="/profile" class="flex-shrink-0">
+            <img :src="userStore.user?.avatar" alt="User Avatar" class="w-10 h-10 rounded-full ring-2 ring-gray-200 dark:ring-gray-700">
+          </router-link>
+          <span v-if="!isSidebarCollapsed" class="ml-3 text-sm font-medium text-gray-900 dark:text-gray-100">{{ userStore.user?.name }}</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main :class="[
+      'flex-1 overflow-auto border-t border-gray-200 dark:border-gray-700',
+      userStore.isLoggedIn && !isSidebarCollapsed ? 'md:ml-0' : '',
+      userStore.isLoggedIn && isSidebarCollapsed ? 'md:ml-0' : ''
+    ]">
+      <router-view />
+    </main>
+    
+    <!-- Overlay for mobile when sidebar is open -->
+        <!-- Mobile Overlay -->
+    <div
+      v-if="userStore.isLoggedIn && !isSidebarCollapsed"
+      @click="isSidebarCollapsed = true"
+      class="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"
+    ></div>
+    
+    <!-- Delete Confirmation Modal -->
+    <AlertDialogRoot v-model:open="showDeleteModal">
+      <AlertDialogPortal>
+        <AlertDialogOverlay class="fixed inset-0 bg-black/50 z-50" />
+        <AlertDialogContent class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 w-[90vw] max-w-md z-50">
+          <AlertDialogTitle class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+            Delete Conversation
+          </AlertDialogTitle>
+          <AlertDialogDescription class="text-sm text-gray-600 dark:text-gray-400 mb-6">
+            Are you sure you want to delete "{{ deleteTarget?.title }}"? This action cannot be undone.
+          </AlertDialogDescription>
+          <div class="flex justify-end space-x-3">
+            <AlertDialogCancel as-child>
+              <button class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
+                Cancel
+              </button>
+            </AlertDialogCancel>
+            <AlertDialogAction as-child>
+              <button @click="executeDelete" class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors">
+                Delete
+              </button>
+            </AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialogPortal>
+    </AlertDialogRoot>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
+import { useUserStore } from '@/stores/user'
+import { useChatStore } from '@/stores/chat'
+import {
+  ChevronLeft,
+  MessageSquare,
+  Settings,
+  Edit,
+  Trash2,
+  PenSquare,
+  Menu,
+  Check,
+  X
+} from 'lucide-vue-next'
+import {
+  AlertDialogRoot,
+  AlertDialogPortal,
+  AlertDialogOverlay,
+  AlertDialogContent,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogCancel,
+  AlertDialogAction
+} from 'radix-vue'
+
+const router = useRouter()
+const userStore = useUserStore()
+const chatStore = useChatStore()
+
+const isSidebarCollapsed = ref(false)
+const editingConvoId = ref<string | null>(null)
+const editingTitle = ref('')
+const editInput = ref<HTMLInputElement | null>(null)
+const showDeleteModal = ref(false)
+const deleteTarget = ref<any>(null)
+
+// Toggle sidebar function
+const toggleSidebar = () => {
+  isSidebarCollapsed.value = !isSidebarCollapsed.value
+}
+
+// Create new chat
+const createNewChat = () => {
+  const newTitle = `New Chat ${chatStore.conversations.length + 1}`
+  chatStore.createConversation(newTitle)
+  router.push('/')
+  // Close sidebar on mobile after creating chat
+  if (window.innerWidth < 768) {
+    isSidebarCollapsed.value = true
+  }
+}
+
+// Start editing conversation inline
+const startEdit = (convo: any) => {
+  editingConvoId.value = convo.id
+  editingTitle.value = convo.title
+  nextTick(() => {
+    if (editInput.value) {
+      editInput.value.focus()
+      editInput.value.select()
+    }
+  })
+}
+
+// Save edited title
+const saveEdit = () => {
+  if (editingTitle.value.trim() && editingConvoId.value) {
+    const conversation = chatStore.conversations.find(c => c.id === editingConvoId.value)
+    if (conversation) {
+      conversation.title = editingTitle.value.trim()
+    }
+  }
+  cancelEdit()
+}
+
+// Cancel editing
+const cancelEdit = () => {
+  editingConvoId.value = null
+  editingTitle.value = ''
+}
+
+// Show delete confirmation modal
+const confirmDelete = (convo: any) => {
+  deleteTarget.value = convo
+  showDeleteModal.value = true
+}
+
+// Execute delete
+const executeDelete = () => {
+  if (deleteTarget.value) {
+    const index = chatStore.conversations.findIndex(c => c.id === deleteTarget.value.id)
+    if (index !== -1) {
+      chatStore.conversations.splice(index, 1)
+      // If deleted conversation was active, switch to another one or create new
+      if (chatStore.currentConversationId === deleteTarget.value.id) {
+        if (chatStore.conversations.length > 0) {
+          chatStore.selectConversation(chatStore.conversations[0].id)
+        } else {
+          createNewChat()
+        }
+      }
+    }
+  }
+  showDeleteModal.value = false
+  deleteTarget.value = null
+}
+
+// Handle theme switching
+const isDarkMode = ref(false)
+
+const toggleTheme = () => {
+  isDarkMode.value = !isDarkMode.value
+  if (isDarkMode.value) {
+    document.documentElement.classList.add('dark')
+    localStorage.setItem('theme', 'dark')
+  } else {
+    document.documentElement.classList.remove('dark')
+    localStorage.setItem('theme', 'light')
+  }
+}
+
+onMounted(() => {
+  // Check for saved theme preference or default to light mode
+  const savedTheme = localStorage.getItem('theme')
+  if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+    isDarkMode.value = true
+    document.documentElement.classList.add('dark')
+  }
+  
+  // Auto-collapse sidebar on mobile
+  if (window.innerWidth < 768) {
+    isSidebarCollapsed.value = true
+  }
+  
+  // Handle window resize
+  window.addEventListener('resize', () => {
+    if (window.innerWidth < 768 && !isSidebarCollapsed.value) {
+      // Don't auto-collapse on mobile if user explicitly opened it
+    }
+  })
+})
+</script>
