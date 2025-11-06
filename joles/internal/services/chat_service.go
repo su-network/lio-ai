@@ -56,6 +56,24 @@ func (s *ChatService) GetChat(id int64) (*models.ChatWithMessages, error) {
 	}, nil
 }
 
+// GetChatByUUID retrieves a chat by UUID with its messages
+func (s *ChatService) GetChatByUUID(uuid string) (*models.ChatWithMessages, error) {
+	chat, err := s.repo.GetChatByUUID(uuid)
+	if err != nil {
+		return nil, err
+	}
+
+	messages, err := s.repo.GetMessagesByChatID(chat.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &models.ChatWithMessages{
+		Chat:     *chat,
+		Messages: messages,
+	}, nil
+}
+
 // GetUserChats retrieves all chats for a user
 func (s *ChatService) GetUserChats(userID string, limit, offset int) ([]models.Chat, int, error) {
 	if limit <= 0 {
@@ -116,11 +134,50 @@ func (s *ChatService) SendMessage(chatID int64, role, content, model string) (*m
 		return nil, fmt.Errorf("content is required")
 	}
 
+	var modelPtr *string
+	if model != "" {
+		modelPtr = &model
+	}
+
 	message := &models.Message{
 		ChatID:  chatID,
 		Role:    role,
 		Content: content,
-		Model:   model,
+		Model:   modelPtr,
+	}
+
+	if err := s.repo.CreateMessage(message); err != nil {
+		return nil, err
+	}
+
+	return message, nil
+}
+
+// SendMessageByUUID sends a message in a chat identified by UUID
+func (s *ChatService) SendMessageByUUID(uuid, role, content, model string) (*models.Message, error) {
+	// Validate chat exists and get ID
+	chat, err := s.repo.GetChatByUUID(uuid)
+	if err != nil {
+		return nil, err
+	}
+
+	if role == "" {
+		role = "user"
+	}
+	if content == "" {
+		return nil, fmt.Errorf("content is required")
+	}
+
+	var modelPtr *string
+	if model != "" {
+		modelPtr = &model
+	}
+
+	message := &models.Message{
+		ChatID:  chat.ID,
+		Role:    role,
+		Content: content,
+		Model:   modelPtr,
 	}
 
 	if err := s.repo.CreateMessage(message); err != nil {
@@ -139,6 +196,17 @@ func (s *ChatService) GetChatMessages(chatID int64) ([]models.Message, error) {
 	}
 
 	return s.repo.GetMessagesByChatID(chatID)
+}
+
+// GetChatMessagesByUUID retrieves all messages for a chat identified by UUID
+func (s *ChatService) GetChatMessagesByUUID(uuid string) ([]models.Message, error) {
+	// Validate chat exists and get ID
+	chat, err := s.repo.GetChatByUUID(uuid)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.repo.GetMessagesByChatID(chat.ID)
 }
 
 // CreateChatCompletion creates a new chat or adds to existing one and gets AI response
