@@ -49,7 +49,7 @@
       <div class="prose prose-sm dark:prose-invert max-w-none break-words whitespace-pre-wrap" v-html="chatStore.formatMessageContent(message.content)"></div>
 
       <div class="flex items-center justify-between mt-2 text-xs text-gray-400 dark:text-gray-500">
-        <span>{{ formatTime(message.timestamp) }}</span>
+        <span>{{ formatTime(message.created_at || message.timestamp) }}</span>
         <div v-if="message.role === 'assistant'" class="flex items-center space-x-2">
           <span v-if="message.responseTime" class="flex items-center space-x-1">
             <Clock class="w-3 h-3" />
@@ -92,7 +92,9 @@ const getBadgeClass = (badge: string): string => {
   }
 }
 
-const formatTime = (date: Date): string => {
-  return new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+const formatTime = (date: Date | string | undefined): string => {
+  if (!date) return ''
+  const dateObj = date instanceof Date ? date : new Date(date)
+  return dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 </script>

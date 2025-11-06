@@ -1,11 +1,14 @@
 export interface Message {
-  id: string
-  role: 'user' | 'assistant'
+  id: number
+  chat_id?: number
+  role: 'user' | 'assistant' | 'system'
   content: string
-  timestamp: Date
+  created_at: string
   model?: string
   responseTime?: number
   tokens?: number
+  // Legacy support
+  timestamp?: Date
 }
 
 export interface Model {
@@ -15,6 +18,15 @@ export interface Model {
   badges: string[]
   responseTime: string
   status: string
+}
+
+export type ModelId = string
+
+export interface ModelParams {
+  temperature: number
+  maxTokens: number
+  topP: number
+  streaming: boolean
 }
 
 export interface Conversation {
