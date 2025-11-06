@@ -1,8 +1,9 @@
-.PHONY: help build run run-bg stop logs deps test test-coverage fmt vet lint security clean db-reset all
+.PHONY: help build run run-bg stop logs deps test test-coverage fmt vet lint security clean db-reset all frontend-install frontend-dev frontend-build dev stop-all
 
 # Root-level Makefile to manage the Go app in joles/
 
 GO_DIR ?= joles
+FRONTEND_DIR ?= frontend
 BIN_NAME ?= lio-ai
 BIN_PATH := $(GO_DIR)/$(BIN_NAME)
 
@@ -87,6 +88,58 @@ clean: ## Clean build artifacts and temp files
 db-reset: ## Remove local SQLite DB (data/lio.db)
 	rm -f data/lio.db
 	@echo "Removed data/lio.db"
+
+# Frontend commands
+frontend-install: ## Install frontend dependencies
+	cd $(FRONTEND_DIR) && npm install
+
+frontend-dev: ## Run frontend development server in background
+	@echo "Starting frontend dev server..."
+	@cd $(FRONTEND_DIR) && npm run dev > /dev/null 2>&1 & echo $$! > $(ROOT_DIR)/frontend.pid
+	@sleep 2
+	@echo "Frontend started on http://localhost:3000 (PID: $$(cat $(ROOT_DIR)/frontend.pid))"
+
+frontend-build: ## Build frontend for production
+	cd $(FRONTEND_DIR) && npm run build
+
+# Combined commands
+dev: build frontend-dev ## Run both backend and frontend in development mode
+	@echo "====================================="
+	@echo "Starting Lio AI Development Environment"
+	@echo "====================================="
+	@if [ -f $(PID_FILE) ] && kill -0 $$(cat $(PID_FILE)) 2>/dev/null; then \
+		echo "✓ Backend already running with PID $$(cat $(PID_FILE))"; \
+	else \
+		set -a; [ -f $(ROOT_DIR)/.env ] && . $(ROOT_DIR)/.env; set +a; \
+		mkdir -p logs; \
+		nohup $(BIN_PATH) >> $(ROOT_DIR)/$(LOG_FILE) 2>&1 & echo $$! > $(ROOT_DIR)/$(PID_FILE); \
+		echo "✓ Backend started (PID: $$(cat $(PID_FILE)))"; \
+	fi
+	@sleep 2
+	@echo "====================================="
+	@echo "✓ Backend API: http://localhost:8080"
+	@echo "✓ Frontend:    http://localhost:3000"
+	@echo "====================================="
+	@echo "Run 'make stop-all' to stop all services"
+
+stop-all: ## Stop both backend and frontend
+	@echo "Stopping all services..."
+	@if [ -f $(PID_FILE) ]; then \
+		PID=$$(cat $(PID_FILE)); \
+		if kill -0 $$PID 2>/dev/null; then \
+			kill $$PID && echo "✓ Stopped backend (PID $$PID)"; \
+		fi; \
+		rm -f $(PID_FILE); \
+	fi
+	@if [ -f frontend.pid ]; then \
+		PID=$$(cat frontend.pid); \
+		if kill -0 $$PID 2>/dev/null; then \
+			kill $$PID && echo "✓ Stopped frontend (PID $$PID)"; \
+		fi; \
+		rm -f frontend.pid; \
+	fi
+	@-pkill -f "vite" 2>/dev/null
+	@echo "All services stopped"
 
 all: clean deps fmt vet build test ## Full cycle: clean, deps, format, vet, build, test
 
