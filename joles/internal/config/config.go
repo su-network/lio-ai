@@ -10,15 +10,22 @@ import (
 
 // Config holds the application configuration
 type Config struct {
-	Server ServerConfig
+	Server   ServerConfig
 	Database DatabaseConfig
-	App AppConfig
+	Backend  BackendConfig
+	App      AppConfig
 }
 
 // ServerConfig contains server configuration
 type ServerConfig struct {
 	Host string
 	Port string
+}
+
+// BackendConfig contains backend service configuration
+type BackendConfig struct {
+	AIServiceURL  string
+	AIServicePort string
 }
 
 // DatabaseConfig contains database configuration
@@ -51,6 +58,10 @@ func LoadConfig() (*Config, error) {
 		Server: ServerConfig{
 			Host: getEnv("SERVER_HOST", "0.0.0.0"),
 			Port: getEnv("SERVER_PORT", "8080"),
+		},
+		Backend: BackendConfig{
+			AIServiceURL:  getEnv("AI_SERVICE_URL", "http://localhost:8000"),
+			AIServicePort: getEnv("AI_SERVICE_PORT", "8000"),
 		},
 		Database: DatabaseConfig{
 			// Store DB under repository root data/ directory by default

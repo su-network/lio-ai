@@ -1,8 +1,9 @@
-.PHONY: help build run run-bg stop logs deps test test-coverage fmt vet lint security clean db-reset all frontend-install frontend-dev frontend-build dev stop-all
+.PHONY: help build run run-bg stop logs deps test test-coverage fmt vet lint security clean db-reset all frontend-install frontend-dev frontend-build ai-install ai-dev ai-stop ai-logs dev start stop-all restart status
 
-# Root-level Makefile to manage the Go app in joles/
+# Root-level Makefile to manage all Lio AI services (Go Gateway + Python AI + Frontend)
 
 GO_DIR ?= joles
+AI_DIR ?= ai
 FRONTEND_DIR ?= frontend
 BIN_NAME ?= lio-ai
 BIN_PATH := $(GO_DIR)/$(BIN_NAME)
@@ -18,7 +19,10 @@ BUILD_TIME := $(shell date -u '+%Y-%m-%d_%H:%M:%S')
 GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
 PID_FILE := $(GO_DIR)/server.pid
+AI_PID_FILE := $(AI_DIR)/ai_service.pid
+FRONTEND_PID_FILE := frontend.pid
 LOG_FILE := logs/server.log
+AI_LOG_FILE := $(AI_DIR)/ai_service.log
 ROOT_DIR := $(CURDIR)
 
 help: ## Display this help screen
@@ -39,19 +43,6 @@ run-bg: build ## Run the gateway in the background (logs/server.log; PID in jole
 		set -a; [ -f $(ROOT_DIR)/.env ] && . $(ROOT_DIR)/.env; set +a; \
 		nohup $(BIN_PATH) >> $(ROOT_DIR)/$(LOG_FILE) 2>&1 & echo $$! > $(ROOT_DIR)/$(PID_FILE); \
 		echo "Started server PID $$(cat $(PID_FILE)) (logging to $(LOG_FILE))"; \
-	fi
-
-stop: ## Stop the background gateway if running
-	@if [ -f $(PID_FILE) ]; then \
-		PID=$$(cat $(PID_FILE)); \
-		if kill -0 $$PID 2>/dev/null; then \
-			kill $$PID && echo "Stopped PID $$PID"; \
-		else \
-			echo "No running process with PID $$PID"; \
-		fi; \
-		rm -f $(PID_FILE); \
-	else \
-		echo "No PID file found"; \
 	fi
 
 logs: ## Tail the server log
@@ -102,44 +93,142 @@ frontend-dev: ## Run frontend development server in background
 frontend-build: ## Build frontend for production
 	cd $(FRONTEND_DIR) && npm run build
 
+# Python AI Service commands
+ai-install: ## Install Python AI service dependencies
+	@echo "Installing Python AI service dependencies..."
+	cd $(AI_DIR) && poetry install
+
+ai-dev: ## Run Python AI service in background
+	@echo "Starting Python AI service..."
+	@if [ -f $(AI_PID_FILE) ] && kill -0 $$(cat $(AI_PID_FILE)) 2>/dev/null; then \
+		echo "✓ AI service already running with PID $$(cat $(AI_PID_FILE))"; \
+	else \
+		cd $(AI_DIR) && nohup poetry run python -m app.main > $(ROOT_DIR)/$(AI_LOG_FILE) 2>&1 & PID=$$!; echo $$PID > $(ROOT_DIR)/$(AI_PID_FILE); \
+		sleep 3; \
+		if kill -0 $$PID 2>/dev/null; then \
+			echo "✓ AI service started (PID: $$PID)"; \
+		else \
+			echo "✗ Failed to start AI service. Check $(AI_LOG_FILE) for details"; \
+			cat $(ROOT_DIR)/$(AI_LOG_FILE) | tail -20; \
+			exit 1; \
+		fi; \
+	fi
+
+ai-stop: ## Stop Python AI service
+	@echo "Stopping Python AI service..."
+	@if [ -f $(AI_PID_FILE) ]; then \
+		PID=$$(cat $(AI_PID_FILE)); \
+		if kill -0 $$PID 2>/dev/null; then \
+			kill $$PID && echo "✓ Stopped AI service (PID $$PID)"; \
+		fi; \
+		rm -f $(AI_PID_FILE); \
+	fi
+	@-pkill -f "python -m app.main" 2>/dev/null || true
+
+ai-logs: ## Tail Python AI service logs
+	@if [ -f $(AI_LOG_FILE) ]; then \
+		tail -f $(AI_LOG_FILE); \
+	else \
+		echo "No AI service log file found at $(AI_LOG_FILE)"; \
+	fi
+
 # Combined commands
-dev: build frontend-dev ## Run both backend and frontend in development mode
+start: build ai-dev ## Start all services (Go Gateway + Python AI)
 	@echo "====================================="
-	@echo "Starting Lio AI Development Environment"
+	@echo "Starting Lio AI Platform"
 	@echo "====================================="
 	@if [ -f $(PID_FILE) ] && kill -0 $$(cat $(PID_FILE)) 2>/dev/null; then \
-		echo "✓ Backend already running with PID $$(cat $(PID_FILE))"; \
+		echo "✓ Go Gateway already running with PID $$(cat $(PID_FILE))"; \
 	else \
 		set -a; [ -f $(ROOT_DIR)/.env ] && . $(ROOT_DIR)/.env; set +a; \
 		mkdir -p logs; \
 		nohup $(BIN_PATH) >> $(ROOT_DIR)/$(LOG_FILE) 2>&1 & echo $$! > $(ROOT_DIR)/$(PID_FILE); \
-		echo "✓ Backend started (PID: $$(cat $(PID_FILE)))"; \
+		sleep 2; \
+		echo "✓ Go Gateway started (PID: $$(cat $(PID_FILE)))"; \
 	fi
-	@sleep 2
 	@echo "====================================="
-	@echo "✓ Backend API: http://localhost:8080"
+	@echo "✓ Go Gateway:  http://localhost:8080"
+	@echo "✓ Python AI:   http://localhost:8000"
+	@echo "====================================="
+	@echo "Run 'make stop' to stop all services"
+	@echo "Run 'make logs' to view Go Gateway logs"
+	@echo "Run 'make ai-logs' to view Python AI logs"
+
+dev: build ai-dev frontend-dev ## Run all services in development mode (Go + Python AI + Frontend)
+	@echo "====================================="
+	@echo "Starting Lio AI Development Environment"
+	@echo "====================================="
+	@if [ -f $(PID_FILE) ] && kill -0 $$(cat $(PID_FILE)) 2>/dev/null; then \
+		echo "✓ Go Gateway already running with PID $$(cat $(PID_FILE))"; \
+	else \
+		set -a; [ -f $(ROOT_DIR)/.env ] && . $(ROOT_DIR)/.env; set +a; \
+		mkdir -p logs; \
+		nohup $(BIN_PATH) >> $(ROOT_DIR)/$(LOG_FILE) 2>&1 & echo $$! > $(ROOT_DIR)/$(PID_FILE); \
+		sleep 2; \
+		echo "✓ Go Gateway started (PID: $$(cat $(PID_FILE)))"; \
+	fi
+	@sleep 1
+	@echo "====================================="
+	@echo "✓ Go Gateway:  http://localhost:8080"
+	@echo "✓ Python AI:   http://localhost:8000"
 	@echo "✓ Frontend:    http://localhost:3000"
 	@echo "====================================="
 	@echo "Run 'make stop-all' to stop all services"
 
-stop-all: ## Stop both backend and frontend
-	@echo "Stopping all services..."
+stop: ai-stop ## Stop Go Gateway and Python AI service
+	@echo "Stopping Go Gateway..."
 	@if [ -f $(PID_FILE) ]; then \
 		PID=$$(cat $(PID_FILE)); \
 		if kill -0 $$PID 2>/dev/null; then \
-			kill $$PID && echo "✓ Stopped backend (PID $$PID)"; \
+			kill $$PID && echo "✓ Stopped Go Gateway (PID $$PID)"; \
 		fi; \
 		rm -f $(PID_FILE); \
+	else \
+		echo "Go Gateway not running"; \
 	fi
-	@if [ -f frontend.pid ]; then \
-		PID=$$(cat frontend.pid); \
+
+stop-all: stop ## Stop all services (Go Gateway + Python AI + Frontend)
+	@echo "Stopping frontend..."
+	@if [ -f $(FRONTEND_PID_FILE) ]; then \
+		PID=$$(cat $(FRONTEND_PID_FILE)); \
 		if kill -0 $$PID 2>/dev/null; then \
 			kill $$PID && echo "✓ Stopped frontend (PID $$PID)"; \
 		fi; \
-		rm -f frontend.pid; \
+		rm -f $(FRONTEND_PID_FILE); \
 	fi
-	@-pkill -f "vite" 2>/dev/null
+	@-pkill -f "vite" 2>/dev/null && echo "✓ Stopped vite dev server" || true
+	@echo "====================================="
 	@echo "All services stopped"
+	@echo "====================================="
+
+restart: stop start ## Restart Go Gateway and Python AI service
+	@echo "Services restarted successfully"
+
+status: ## Show status of all services
+	@echo "====================================="
+	@echo "Lio AI Platform Status"
+	@echo "====================================="
+	@if [ -f $(PID_FILE) ] && kill -0 $$(cat $(PID_FILE)) 2>/dev/null; then \
+		echo "✓ Go Gateway:  RUNNING (PID: $$(cat $(PID_FILE)))"; \
+		echo "  URL: http://localhost:8080"; \
+	else \
+		echo "✗ Go Gateway:  STOPPED"; \
+	fi
+	@echo ""
+	@if [ -f $(AI_PID_FILE) ] && kill -0 $$(cat $(AI_PID_FILE)) 2>/dev/null; then \
+		echo "✓ Python AI:   RUNNING (PID: $$(cat $(AI_PID_FILE)))"; \
+		echo "  URL: http://localhost:8000"; \
+	else \
+		echo "✗ Python AI:   STOPPED"; \
+	fi
+	@echo ""
+	@if [ -f $(FRONTEND_PID_FILE) ] && kill -0 $$(cat $(FRONTEND_PID_FILE)) 2>/dev/null; then \
+		echo "✓ Frontend:    RUNNING (PID: $$(cat $(FRONTEND_PID_FILE)))"; \
+		echo "  URL: http://localhost:3000"; \
+	else \
+		echo "✗ Frontend:    STOPPED"; \
+	fi
+	@echo "====================================="
 
 all: clean deps fmt vet build test ## Full cycle: clean, deps, format, vet, build, test
 

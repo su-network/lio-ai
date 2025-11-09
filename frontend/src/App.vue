@@ -151,6 +151,28 @@
               Templates
             </span>
           </router-link>
+
+          <!-- Models -->
+          <router-link
+            to="/models"
+            :class="[
+              'flex items-center px-4 py-3 rounded-xl font-medium text-sm transition-all duration-200',
+              isSidebarCollapsed ? 'justify-center px-2' : 'space-x-3',
+              $route.path === '/models' 
+                ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300' 
+                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+            ]"
+          >
+            <Layers class="w-5 h-5 flex-shrink-0" />
+            <span
+              :class="[
+                'transition-all duration-300 whitespace-nowrap',
+                isSidebarCollapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'
+              ]"
+            >
+              Models
+            </span>
+          </router-link>
         </div>
 
         <!-- Recent Chats List -->
@@ -180,8 +202,11 @@
           <router-link
             to="/settings"
             :class="[
-              'flex items-center px-4 py-3 rounded-xl font-medium text-sm transition-all duration-200 text-gray-700 dark:text-gray-300',
-              isSidebarCollapsed ? 'justify-center' : 'space-x-3'
+              'flex items-center px-4 py-3 rounded-xl font-medium text-sm transition-all duration-200',
+              isSidebarCollapsed ? 'justify-center px-2' : 'space-x-3',
+              $route.path === '/settings'
+                ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
+                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
             ]"
           >
             <Settings class="w-5 h-5 flex-shrink-0" />
@@ -195,15 +220,29 @@
             </span>
           </router-link>
         </nav>
-        <div :class="[
-          'flex items-center mt-4',
-          isSidebarCollapsed ? 'justify-center' : 'px-4 py-2'
-        ]">
-          <router-link to="/profile" class="flex-shrink-0">
-            <img :src="userStore.user?.avatar" alt="User Avatar" class="w-10 h-10 rounded-full ring-2 ring-gray-200 dark:ring-gray-700">
-          </router-link>
-          <span v-if="!isSidebarCollapsed" class="ml-3 text-sm font-medium text-gray-900 dark:text-gray-100">{{ userStore.user?.name }}</span>
-        </div>
+        
+        <router-link
+          to="/profile"
+          :class="[
+            'flex items-center mt-4 rounded-xl transition-all duration-200',
+            isSidebarCollapsed ? 'justify-center p-2' : 'px-4 py-2',
+            $route.path === '/profile'
+              ? 'bg-blue-50 dark:bg-blue-900/20'
+              : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
+          ]"
+        >
+          <img 
+            :src="userStore.user?.avatar" 
+            alt="User Avatar" 
+            class="w-10 h-10 rounded-full ring-2 ring-gray-200 dark:ring-gray-700 flex-shrink-0"
+          />
+          <span 
+            v-if="!isSidebarCollapsed" 
+            class="ml-3 text-sm font-medium text-gray-900 dark:text-gray-100"
+          >
+            {{ userStore.user?.name }}
+          </span>
+        </router-link>
       </div>
     </aside>
 
@@ -215,6 +254,9 @@
     ]">
       <router-view />
     </main>
+
+    <!-- Toast Notifications -->
+    <ToastNotification ref="toastRef" />
     
     <!-- Overlay for mobile when sidebar is open -->
         <!-- Mobile Overlay -->
@@ -317,10 +359,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, nextTick, provide } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useChatStore } from '@/stores/chat'
+import ToastNotification from '@/components/ToastNotification.vue'
+import { ToastServiceKey, type ToastService, type ToastOptions } from '@/composables/useToast'
 import {
   ChevronLeft,
   MessageSquare,
@@ -332,7 +376,9 @@ import {
   Check,
   X,
   FolderOpen,
-  Layout
+  Layout,
+  Layers,
+  Sparkles
 } from 'lucide-vue-next'
 import {
   AlertDialogRoot,
@@ -348,6 +394,38 @@ import {
 const router = useRouter()
 const userStore = useUserStore()
 const chatStore = useChatStore()
+const toastRef = ref<InstanceType<typeof ToastNotification> | null>(null)
+
+// Provide toast service
+const toastService: ToastService = {
+  addToast: (options: ToastOptions) => {
+    if (toastRef.value) {
+      toastRef.value.addToast(options)
+    }
+  },
+  success: (title: string, message?: string) => {
+    if (toastRef.value) {
+      toastRef.value.addToast({ type: 'success', title, message })
+    }
+  },
+  error: (title: string, message?: string) => {
+    if (toastRef.value) {
+      toastRef.value.addToast({ type: 'error', title, message })
+    }
+  },
+  info: (title: string, message?: string) => {
+    if (toastRef.value) {
+      toastRef.value.addToast({ type: 'info', title, message })
+    }
+  },
+  warning: (title: string, message?: string) => {
+    if (toastRef.value) {
+      toastRef.value.addToast({ type: 'warning', title, message })
+    }
+  }
+}
+
+provide(ToastServiceKey, toastService)
 
 const isSidebarCollapsed = ref(false)
 const editingConvoId = ref<string | null>(null)

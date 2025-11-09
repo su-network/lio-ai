@@ -74,3 +74,35 @@ type UserProfile struct {
 	TotalDocs    int           `json:"total_documents"`
 	UsageSummary *UsageSummary `json:"usage_summary"`
 }
+
+// ProviderAPIKey represents a user's API key for an LLM provider
+type ProviderAPIKey struct {
+	ID              int64     `json:"id"`
+	UserID          string    `json:"user_id"`
+	Provider        string    `json:"provider"` // openai, anthropic, google, cohere
+	APIKeyEncrypted string    `json:"-"`        // Never expose in JSON
+	APIKey          string    `json:"api_key,omitempty"` // Only for create/update
+	ModelsEnabled   string    `json:"models_enabled,omitempty"` // JSON array of model IDs
+	IsActive        bool      `json:"is_active"`
+	LastUsedAt      *time.Time `json:"last_used_at,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}
+
+// ProviderAPIKeyRequest represents a request to add/update provider API key
+type ProviderAPIKeyRequest struct {
+	Provider      string   `json:"provider" binding:"required"`
+	APIKey        string   `json:"api_key" binding:"required"`
+	ModelsEnabled []string `json:"models_enabled,omitempty"`
+}
+
+// ProviderAPIKeyResponse represents the response (without sensitive data)
+type ProviderAPIKeyResponse struct {
+	ID            int64      `json:"id"`
+	Provider      string     `json:"provider"`
+	ModelsEnabled []string   `json:"models_enabled"`
+	IsActive      bool       `json:"is_active"`
+	LastUsedAt    *time.Time `json:"last_used_at,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	HasKey        bool       `json:"has_key"` // Indicates if key is set
+}

@@ -3,11 +3,28 @@
     <div class="flex items-center justify-between w-full gap-3">
       <!-- Left side - Model Selector -->
       <div class="flex items-center gap-2">
-        <DropdownMenuRoot v-if="availableModels && availableModels.length > 0">
+        <!-- Show message when no models available -->
+        <div v-if="!availableModels || availableModels.length === 0" class="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <span class="text-sm font-medium text-amber-800 dark:text-amber-200">No models available</span>
+          <router-link to="/settings" class="text-sm text-blue-600 dark:text-blue-400 hover:underline ml-1">
+            Configure API keys →
+          </router-link>
+        </div>
+
+        <!-- Model dropdown when models are available -->
+        <DropdownMenuRoot v-else>
           <DropdownMenuTrigger as-child>
             <button
               class="flex items-center space-x-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
             >
+              <!-- Online status indicator -->
+              <span class="flex h-2 w-2 relative">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+              </span>
               <span class="text-sm font-medium text-gray-900 dark:text-white truncate max-w-[150px] sm:max-w-none">
                 {{ getModelDisplayName(selectedModel) }}
               </span>
@@ -22,7 +39,7 @@
               class="min-w-[280px] sm:w-96 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto p-2"
             >
               <DropdownMenuLabel class="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2 px-3 uppercase tracking-wide">
-                Select Model
+                Available Models
               </DropdownMenuLabel>
               <DropdownMenuItem
                 v-for="model in availableModels"
@@ -32,7 +49,11 @@
                 :class="{ 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700': selectedModel === model.id }"
               >
                 <div class="flex items-center justify-between w-full mb-1">
-                  <span class="text-sm font-medium text-gray-900 dark:text-white">{{ model.name }}</span>
+                  <div class="flex items-center gap-2">
+                    <!-- Online indicator -->
+                    <span class="flex h-2 w-2 rounded-full bg-green-500"></span>
+                    <span class="text-sm font-medium text-gray-900 dark:text-white">{{ model.name }}</span>
+                  </div>
                   <div v-if="selectedModel === model.id" class="flex items-center">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
@@ -40,11 +61,8 @@
                   </div>
                 </div>
                 <div class="flex items-center gap-2 flex-wrap">
-                  <span 
-                    class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
-                    :class="model.status === 'Online' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-400'"
-                  >
-                    {{ model.status }}
+                  <span v-if="model.provider" class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
+                    {{ model.provider }}
                   </span>
                   <span v-if="model.context_length" class="text-xs text-gray-500 dark:text-gray-400">
                     {{ formatContextLength(model.context_length) }}
@@ -56,8 +74,8 @@
         </DropdownMenuRoot>
       </div>
 
-      <!-- Right side - Actions -->
-      <div class="flex items-center gap-2">
+      <!-- Right side - Actions (only show if models available) -->
+      <div v-if="availableModels && availableModels.length > 0" class="flex items-center gap-2">
         <!-- Temperature Control -->
         <DropdownMenuRoot>
           <DropdownMenuTrigger as-child>
@@ -251,10 +269,8 @@ const formatContextLength = (length: number): string => {
 }
 
 const getModelStatusColor = (modelId: string): string => {
-  const model = props.availableModels.find(m => m.id === modelId)
-  if (model?.status === 'Online') return 'bg-green-500'
-  if (model?.status === 'Beta') return 'bg-yellow-500'
-  return 'bg-gray-500'
+  // All models shown are available (have API keys), so always show green
+  return 'bg-green-500'
 }
 
 const getBadgeClass = (badge: string): string => {

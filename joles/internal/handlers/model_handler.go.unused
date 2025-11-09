@@ -1,0 +1,152 @@
+package handlers
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"time"
+
+	"github.com/gin-gonic/gin"
+)
+
+// AIServiceModel represents a model from the AI service
+type AIServiceModel struct {
+	ID           string                 `json:"id"`
+	Name         string                 `json:"name"`
+	Provider     string                 `json:"provider"`
+	ModelName    string                 `json:"model_name"`
+	Description  string                 `json:"description"`
+	Enabled      bool                   `json:"enabled"`
+	Status       string                 `json:"status"`
+	Capabilities map[string]interface{} `json:"capabilities"`
+}
+
+// VerifiedModelsResponse represents the response for verified models
+type VerifiedModelsResponse struct {
+	Models []AIServiceModel `json:"models"`
+	Count  int              `json:"count"`
+}
+
+// GetVerifiedModels returns models that have API keys configured and are verified
+func (h *Handler) GetVerifiedModels(c *gin.Context) {
+	userID := c.Param("userId")
+	if userID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "User ID is required"})
+		return
+	}
+
+	// Get user's API keys
+	keys, err := h.repos.ProviderKeyRepo.GetAllByUser(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch API keys"})
+		return
+	}
+
+	// If no keys configured, return empty list
+	if len(keys) == 0 {
+		c.JSON(http.StatusOK, VerifiedModelsResponse{
+			Models: []AIServiceModel{},
+			Count:  0,
+		})
+		return
+	}
+
+	// Build list of providers with keys
+	providers := make(map[string]bool)
+	for _, key := range keys {
+		providers[key.Provider] = true
+	}
+
+	// Get models from AI service and verify health
+	aiServiceURL := "http://localhost:8000/api/v1/models/status"
+	resp, err := http.Get(aiServiceURL)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch models from AI service"})
+		return
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read AI service response"})
+		return
+	}
+
+	var aiResponse struct {
+		Models []struct {
+			ID           string                 `json:"id"`
+			Name         string                 `json:"name"`
+			Provider     string                 `json:"provider"`
+			ModelName    string                 `json:"model_name"`
+			Description  string                 `json:"description"`
+			Enabled      bool                   `json:"enabled"`
+			Status       string                 `json:"status"`
+			Capabilities map[string]interface{} `json:"capabilities"`
+		} `json:"models"`
+	}
+
+	if err := json.Unmarshal(body, &aiResponse); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse AI service response"})
+		return
+	}
+
+	// Filter models: only include those with API keys and status "available"
+	verifiedModels := []AIServiceModel{}
+	for _, model := range aiResponse.Models {
+		if providers[model.Provider] && model.Status == "available" {
+			// Verify model health with a quick test
+			if h.verifyModelHealth(model.Provider, userID) {
+				verifiedModels = append(verifiedModels, AIServiceModel{
+					ID:           model.ID,
+					Name:         model.Name,
+					Provider:     model.Provider,
+					ModelName:    model.ModelName,
+					Description:  model.Description,
+					Enabled:      true,
+					Status:       "Online",
+					Capabilities: model.Capabilities,
+				})
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, VerifiedModelsResponse{
+		Models: verifiedModels,
+		Count:  len(verifiedModels),
+	})
+}
+
+// verifyModelHealth performs a quick health check on the model
+func (h *Handler) verifyModelHealth(provider string, userID string) bool {
+	// Get the API key for this provider
+	key, err := h.repos.ProviderKeyRepo.GetByUserAndProvider(userID, provider)
+	if err != nil || key == nil {
+		return false
+	}
+
+	// Make a test request to AI service to verify the key works
+	testURL := fmt.Sprintf("http://localhost:8000/api/v1/models/verify/%s", provider)
+	
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+	}
+	
+	req, err := http.NewRequest("POST", testURL, nil)
+	if err != nil {
+		return false
+	}
+	
+	// Add API key header (encrypted key will be decrypted by AI service)
+	req.Header.Set("X-API-Key", key.EncryptedKey)
+	req.Header.Set("X-Provider", provider)
+	
+	resp, err := client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	
+	// If status is 200, the model is healthy
+	return resp.StatusCode == http.StatusOK
+}

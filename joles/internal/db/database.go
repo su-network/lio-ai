@@ -142,6 +142,22 @@ func migrate(db *sql.DB) error {
 		('qwen-2.5-coder', 0.000001, 0.000002, 'code_generation', 1),
 		('codellama-34b', 0.0000008, 0.0000016, 'code_generation', 1),
 		('default', 0.000001, 0.000002, 'chat', 1);
+
+	-- Provider API Keys table
+	CREATE TABLE IF NOT EXISTS provider_api_keys (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id VARCHAR(255) NOT NULL,
+		provider VARCHAR(50) NOT NULL,
+		api_key_encrypted TEXT NOT NULL,
+		models_enabled TEXT,
+		is_active BOOLEAN DEFAULT 1,
+		last_used_at DATETIME,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(user_id, provider)
+	);
+	CREATE INDEX IF NOT EXISTS idx_provider_keys_user_id ON provider_api_keys(user_id);
+	CREATE INDEX IF NOT EXISTS idx_provider_keys_provider ON provider_api_keys(provider);
 	`
 
 	if _, err := db.Exec(schema); err != nil {

@@ -50,14 +50,6 @@ export const useChatStore = defineStore('chat', () => {
     )
   })
 
-  const getModelDisplayName = (modelId: ModelId) => {
-    return availableModels.value.find(m => m.id === modelId)?.name || 'Unknown Model'
-  }
-
-  const getModelBadges = (modelId: ModelId) => {
-    return availableModels.value.find(m => m.id === modelId)?.badges || []
-  }
-
   // Actions
   async function fetchChats() {
     loadingChats.value = true
@@ -78,24 +70,44 @@ export const useChatStore = defineStore('chat', () => {
 
   async function loadAvailableModels() {
     try {
-      const models = await apiService.getAvailableModels()
-      if (models && models.length > 0) {
-        availableModels.value = models.map(m => ({
-          id: m.name.toLowerCase().replace(/\s+/g, '-'),
-          name: m.name,
-          description: m.description,
-          status: 'Online',
-          responseTime: '~2s',
-          badges: m.capabilities || []
-        }))
-        // Set first model as default if current selection not found
-        if (!availableModels.value.find(m => m.id === selectedModel.value)) {
-          selectedModel.value = availableModels.value[0]?.id || 'gpt-4-turbo'
+      // Get models with status to filter only available ones
+      const statusResponse = await apiService.getModelsStatus()
+      
+      if (statusResponse && statusResponse.models) {
+        // Filter only models that are available (have API keys)
+        const availableModelsList = statusResponse.models
+          .filter((m: any) => m.status === 'available')
+          .map((m: any) => {
+            const modelConfig = m
+            return {
+              id: m.model_id,
+              name: modelConfig.model_name || m.model_id.replace(/-/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
+              description: `${m.provider} model`,
+              status: 'Online',
+              responseTime: `~${modelConfig.metrics?.average_latency_ms || 2000}ms`,
+              badges: modelConfig.capabilities?.special_features || [],
+              provider: m.provider,
+              context_length: modelConfig.capabilities?.context_window || 4096
+            }
+          })
+        
+        if (availableModelsList.length > 0) {
+          availableModels.value = availableModelsList
+          // Set first available model as default if current selection not available
+          const currentModelAvailable = availableModels.value.find(m => m.id === selectedModel.value)
+          if (!currentModelAvailable && availableModels.value[0]) {
+            selectedModel.value = availableModels.value[0].id
+            console.log('Auto-selected first available model:', selectedModel.value)
+          }
+        } else {
+          console.warn('No models with API keys available. Please configure API keys in Settings.')
+          availableModels.value = []
         }
       }
     } catch (err: any) {
-      console.error('Error loading models:', err)
+      console.error('Error loading available models:', err)
       // Keep empty array if API fails
+      availableModels.value = []
     }
   }
 
@@ -184,7 +196,24 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  async function sendMessage(content: string) {
+  // Helper function to get model display name
+  function getModelDisplayName(modelId: string): string {
+    const model = availableModels.value.find(m => m.id === modelId)
+    return model?.name || modelId
+  }
+
+  // Helper function to get model badges
+  function getModelBadges(modelId: string): string[] {
+    const model = availableModels.value.find(m => m.id === modelId)
+    return model?.badges || []
+  }
+
+  async function sendMessage(content: string, metadata?: any) {
+    if (!availableModels.value || availableModels.value.length === 0) {
+      error.value = 'No models available. Please configure API keys in Settings.'
+      return
+    }
+
     if (!currentConversationUUID.value) {
       // Generate title from first message (first 50 chars)
       const title = content.length > 50 ? content.substring(0, 47) + '...' : content
@@ -222,27 +251,68 @@ export const useChatStore = defineStore('chat', () => {
         conversation.messages[userMsgIndex] = savedUserMessage
       }
 
-      // TODO: Call AI model API endpoint here
-      // For now, simulate AI response
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      let aiResponse = ''
+      let usedModel = selectedModel.value
+      
+      try {
+        // Call the AI generation API through the Go gateway
+        const response = await fetch('/api/generate', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            prompt: content,
+            language: 'python',
+            complexity: 'simple',
+            selected_models: [selectedModel.value],
+            max_models: 1,
+            timeout: 30,
+            user_id: userId.value
+          })
+        })
 
-      const aiResponse = `This is a response from **${getModelDisplayName(selectedModel.value)}**. 
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+          throw new Error(errorData.error || `API Error: ${response.status}`)
+        }
 
-You said: *"${content}"*
+        const result = await response.json()
+        
+        if (result.status === 'success' && result.model_responses && result.model_responses.length > 0) {
+          const modelResponse = result.model_responses[0]
+          aiResponse = modelResponse.generated_code || modelResponse.response || 'No response generated'
+          usedModel = modelResponse.model_id || selectedModel.value
+          
+          // Format the response nicely
+          if (modelResponse.generated_code) {
+            aiResponse = `Here's the generated code:\n\n\`\`\`python\n${modelResponse.generated_code}\n\`\`\`\n\n*Generated by ${getModelDisplayName(usedModel)}*`
+          }
+        } else if (result.consensus_code) {
+          aiResponse = `\`\`\`python\n${result.consensus_code}\n\`\`\`\n\n*Generated by ${getModelDisplayName(result.best_model || selectedModel.value)}*`
+          usedModel = result.best_model || selectedModel.value
+        } else {
+          throw new Error('No valid response from AI service')
+        }
+      } catch (apiError: any) {
+        console.error('AI generation error:', apiError)
+        // Fallback response
+        aiResponse = `I apologize, but I encountered an error while processing your request: ${apiError.message}
+        
+Please make sure:
+1. You have configured your API keys in Settings
+2. The selected model (${getModelDisplayName(selectedModel.value)}) is available
+3. Your API key has sufficient credits
 
-Here's an example code block:
-\`\`\`javascript
-console.log("Hello from the integrated API!");
-\`\`\`
-
-This message is now stored in the database via the Go API!`
+You can check available models and configure API keys in the Settings page.`
+      }
 
       // Save assistant message to API
       const assistantMessage = await apiService.addMessage(
         conversation.id,
         'assistant',
         aiResponse,
-        selectedModel.value
+        usedModel
       )
       
       conversation.messages.push(assistantMessage)
@@ -327,7 +397,7 @@ This message is now stored in the database via the Go API!`
 
   function selectModel(modelId: ModelId) {
     const model = availableModels.value.find(m => m.id === modelId)
-    if (model && model.status === 'Online') {
+    if (model) {
       selectedModel.value = modelId
     }
   }

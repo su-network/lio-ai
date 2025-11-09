@@ -211,6 +211,7 @@
         :editing-message="editingMessage"
         :quick-prompts="[]"
         :placeholder="'Type your message...'"
+        :has-available-models="chatStore.availableModels.length > 0"
         @send-message="sendMessage"
         @cancel-edit="cancelEdit"
       />
@@ -251,13 +252,19 @@ const scrollToBottom = () => {
 
 watch(() => chatStore.messages, scrollToBottom, { deep: true })
 
-const sendMessage = (content: string) => {
+const sendMessage = (messageData: any) => {
   if (editingMessage.value) {
+    const content = typeof messageData === 'string' ? messageData : messageData.content
     chatStore.updateMessage(editingMessage.value.id, content)
     editingMessage.value = null
     editContent.value = ''
   } else {
-    chatStore.sendMessage(content)
+    // Handle both string and object formats
+    if (typeof messageData === 'string') {
+      chatStore.sendMessage(messageData)
+    } else {
+      chatStore.sendMessage(messageData.content, messageData)
+    }
   }
 }
 

@@ -11,13 +11,47 @@ export interface Message {
   timestamp?: Date
 }
 
+export interface ModelCapabilities {
+  languages: string[]
+  frameworks: string[]
+  max_complexity: 'simple' | 'intermediate' | 'advanced'
+  special_features: string[]
+  context_window: number
+  output_limit: number
+}
+
+export interface ModelMetrics {
+  average_latency_ms: number
+  success_rate: number
+  cost_per_request: number
+  requests_per_minute: number
+  uptime: number
+}
+
+export interface ModelConfig {
+  temperature: number
+  top_p?: number
+  top_k?: number
+  max_tokens?: number
+  presence_penalty?: number
+  frequency_penalty?: number
+}
+
 export interface Model {
   id: string
   name: string
-  description: string
-  badges: string[]
-  responseTime: string
-  status: string
+  provider: 'openai' | 'anthropic' | 'google' | 'cohere' | 'mistral'
+  model_name: string
+  enabled: boolean
+  priority: number
+  capabilities: ModelCapabilities
+  metrics: ModelMetrics
+  config: ModelConfig
+  // Legacy support
+  description?: string
+  badges?: string[]
+  responseTime?: string
+  status?: string
 }
 
 export type ModelId = string

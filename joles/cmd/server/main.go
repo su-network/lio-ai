@@ -50,6 +50,7 @@ func main() {
 	docRepo := repositories.NewDocumentRepository(database.GetConnection())
 	chatRepo := repositories.NewChatRepository(database.GetConnection())
 	usageRepo := repositories.NewUsageRepository(database.GetConnection())
+	providerKeyRepo := repositories.NewProviderKeyRepository(database.GetConnection())
 	
 	docService := services.NewDocumentService(docRepo)
 	chatService := services.NewChatService(chatRepo)
@@ -59,6 +60,7 @@ func main() {
 	chatHandler := handlers.NewChatHandler(chatService)
 	usageHandler := handlers.NewUsageHandler(usageService)
 	systemHandler := handlers.NewSystemHandler(database.GetConnection())
+	providerKeyHandler := handlers.NewProviderKeyHandler(providerKeyRepo)
 
 	// Initialize proxy handler for FastAPI backend
 	backendURL := os.Getenv("BACKEND_URL")
@@ -126,6 +128,15 @@ func main() {
 			system.GET("/info", systemHandler.GetInfo)
 			system.GET("/stats", systemHandler.GetStats)
 		}
+
+		// Provider API Key routes
+		apiKeys := api.Group("/api-keys")
+		{
+			apiKeys.GET("", providerKeyHandler.GetAllKeys)
+			apiKeys.POST("", providerKeyHandler.CreateOrUpdateKey)
+			apiKeys.DELETE("/:provider", providerKeyHandler.DeleteKey)
+			apiKeys.GET("/:provider", providerKeyHandler.GetProviderKey)
+		}
 	}
 
 	// Proxy routes for code generation service
@@ -140,7 +151,32 @@ func main() {
 		codeGen.POST("/rag/search", func(c *gin.Context) {
 			proxyHandler.ProxyRequest(c)
 		})
-		codeGen.GET("/stats", func(c *gin.Context) {
+	}
+
+	// Stats endpoint (separate from codegen)
+	router.GET("/api/v1/stats", func(c *gin.Context) {
+		proxyHandler.ProxyRequest(c)
+	})
+
+	// Proxy routes for model management
+	models := router.Group("/api/v1/models")
+	{
+		models.GET("", func(c *gin.Context) {
+			proxyHandler.ProxyRequest(c)
+		})
+		models.GET("/status", func(c *gin.Context) {
+			proxyHandler.ProxyRequest(c)
+		})
+		models.GET("/:model_id", func(c *gin.Context) {
+			proxyHandler.ProxyRequest(c)
+		})
+		models.POST("/:model_id/health", func(c *gin.Context) {
+			proxyHandler.ProxyRequest(c)
+		})
+		models.GET("/recommend", func(c *gin.Context) {
+			proxyHandler.ProxyRequest(c)
+		})
+		models.POST("/recommend", func(c *gin.Context) {
 			proxyHandler.ProxyRequest(c)
 		})
 	}
@@ -154,8 +190,8 @@ func main() {
 	addr := fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port)
 
 	// Start server
-	log.Printf("✓ Starting server at http://%s", addr)
-	log.Printf("✓ API Documentation available at http://%s/docs", addr)
+	log.Printf("✓ Starting Go Gateway at http://%s", addr)
+	log.Printf("✓ Python AI Service: http://localhost:%s", cfg.Backend.AIServicePort)
 
 	if err := router.Run(addr); err != nil {
 		log.Fatalf("Server failed to start: %v", err)

@@ -321,12 +321,47 @@ export const apiService = {
 
   getAvailableModels: async (): Promise<Model[]> => {
     try {
-      const response = await apiClient.get('/api/v1/system/info')
-      return response.data.data?.models || []
+      const response = await apiClient.get('/api/v1/models', {
+        params: { enabled_only: true }
+      })
+      return response.data.models || []
     } catch (error) {
-      console.warn('Failed to load models, using empty array:', error)
-      return []
+      console.warn('Failed to load models from /api/v1/models, trying legacy endpoint:', error)
+      // Fallback to legacy endpoint
+      try {
+        const response = await apiClient.get('/api/v1/system/info')
+        return response.data.data?.models || []
+      } catch (fallbackError) {
+        console.warn('Failed to load models from legacy endpoint:', fallbackError)
+        return []
+      }
     }
+  },
+
+  getModelsStatus: async (): Promise<any> => {
+    const response = await apiClient.get('/api/v1/models/status')
+    return response.data
+  },
+
+  getModelById: async (modelId: string): Promise<Model> => {
+    const response = await apiClient.get(`/api/v1/models/${modelId}`)
+    return response.data
+  },
+
+  getRecommendedModels: async (params: {
+    language: string
+    complexity?: 'simple' | 'intermediate' | 'advanced'
+    framework?: string
+    max_models?: number
+    strategy?: string
+  }): Promise<Model[]> => {
+    const response = await apiClient.post('/api/v1/models/recommend', params)
+    return response.data.models || []
+  },
+
+  checkModelHealth: async (modelId: string): Promise<{ model_id: string; healthy: boolean; timestamp: string }> => {
+    const response = await apiClient.post(`/api/v1/models/${modelId}/health`)
+    return response.data
   },
 
   getSystemStats: async (): Promise<any> => {
@@ -351,8 +386,32 @@ export const apiService = {
   },
 
   getStats: async (): Promise<StatsResponse> => {
-    const response = await apiClient.get('/api/v1/codegen/stats')
+    const response = await apiClient.get('/api/v1/stats')
     return response.data
+  },
+
+  // Provider API Keys endpoints
+  getProviderKeys: async (userId: string): Promise<any[]> => {
+    const response = await apiClient.get('/api/v1/api-keys', {
+      params: { user_id: userId }
+    })
+    return response.data.keys || []
+  },
+
+  createProviderKey: async (userId: string, provider: string, apiKey: string, modelsEnabled: string[]): Promise<void> => {
+    await apiClient.post('/api/v1/api-keys', {
+      provider,
+      api_key: apiKey,
+      models_enabled: modelsEnabled
+    }, {
+      params: { user_id: userId }
+    })
+  },
+
+  deleteProviderKey: async (userId: string, provider: string): Promise<void> => {
+    await apiClient.delete(`/api/v1/api-keys/${provider}`, {
+      params: { user_id: userId }
+    })
   }
 }
 

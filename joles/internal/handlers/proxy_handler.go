@@ -25,6 +25,17 @@ func NewProxyHandler(targetURL string) *ProxyHandler {
 
 // ProxyRequest proxies an HTTP request to the backend service.
 func (ph *ProxyHandler) ProxyRequest(c *gin.Context) {
+	// Block sensitive endpoints from being proxied
+	blockedPaths := []string{"/docs", "/openapi.json", "/redoc"}
+	for _, blocked := range blockedPaths {
+		if c.Request.URL.Path == blocked {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "Not found",
+			})
+			return
+		}
+	}
+
 	// Build target URL
 	targetURL := ph.targetURL + c.Request.RequestURI
 

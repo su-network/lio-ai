@@ -261,6 +261,147 @@
             </div>
           </div>
 
+          <!-- AI Model Selection -->
+          <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="text-xl font-semibold text-gray-900 dark:text-white">AI Models</h2>
+              <button
+                @click="fetchModels"
+                :disabled="loadingModels"
+                class="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+              >
+                {{ loadingModels ? 'Loading...' : 'Refresh' }}
+              </button>
+            </div>
+
+            <div v-if="loadingModels" class="text-center py-4">
+              <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+            </div>
+
+            <div v-else-if="modelsError" class="text-red-600 dark:text-red-400 text-sm">
+              {{ modelsError }}
+            </div>
+
+            <div v-else class="space-y-4">
+              <!-- Model Strategy -->
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Model Selection Strategy
+                </label>
+                <select
+                  v-model="modelStrategy"
+                  @change="onStrategyChange"
+                  class="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                >
+                  <option value="recommended">Recommended (Auto-select)</option>
+                  <option value="manual">Manual Selection</option>
+                  <option value="all">Use All Models</option>
+                </select>
+              </div>
+
+              <!-- Recommended Models -->
+              <div v-if="modelStrategy === 'recommended' && recommendedModels.length > 0">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Recommended for {{ selectedLanguage }}
+                </label>
+                <div class="space-y-2">
+                  <div
+                    v-for="model in recommendedModels"
+                    :key="model.id"
+                    class="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md"
+                  >
+                    <div class="flex items-center space-x-3">
+                      <div class="w-8 h-8 rounded-full flex items-center justify-center"
+                           :class="getProviderColor(model.provider)">
+                        <span class="text-xs font-bold text-white">{{ model.provider.slice(0, 2).toUpperCase() }}</span>
+                      </div>
+                      <div>
+                        <p class="text-sm font-medium text-gray-900 dark:text-white">{{ model.name }}</p>
+                        <p class="text-xs text-gray-600 dark:text-gray-400">{{ model.id }}</p>
+                      </div>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                      <span class="px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded">
+                        Priority {{ model.priority }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Manual Model Selection -->
+              <div v-if="modelStrategy === 'manual'">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Select Models (up to 3)
+                </label>
+                <div class="space-y-2 max-h-60 overflow-y-auto">
+                  <div
+                    v-for="model in availableModels"
+                    :key="model.id"
+                    @click="toggleModelSelection(model.id)"
+                    class="flex items-center justify-between p-3 border rounded-md cursor-pointer transition-colors"
+                    :class="selectedModels.includes(model.id)
+                      ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-500 dark:border-blue-400'
+                      : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'"
+                  >
+                    <div class="flex items-center space-x-3">
+                      <input
+                        type="checkbox"
+                        :checked="selectedModels.includes(model.id)"
+                        class="rounded border-gray-300 dark:border-gray-600"
+                        @click.stop
+                      />
+                      <div class="w-8 h-8 rounded-full flex items-center justify-center"
+                           :class="getProviderColor(model.provider)">
+                        <span class="text-xs font-bold text-white">{{ model.provider.slice(0, 2).toUpperCase() }}</span>
+                      </div>
+                      <div>
+                        <p class="text-sm font-medium text-gray-900 dark:text-white">{{ model.name }}</p>
+                        <p class="text-xs text-gray-600 dark:text-gray-400">
+                          {{ model.provider }} • Context: {{ formatNumber(model.capabilities.context_window) }}
+                        </p>
+                      </div>
+                    </div>
+                    <span class="text-xs text-gray-500 dark:text-gray-400">
+                      {{ model.capabilities.max_complexity }}
+                    </span>
+                  </div>
+                </div>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                  {{ selectedModels.length }} of 3 models selected
+                </p>
+              </div>
+
+              <!-- All Models Info -->
+              <div v-if="modelStrategy === 'all'" class="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
+                <p class="text-sm text-gray-700 dark:text-gray-300">
+                  All {{ availableModels.length }} models will be used for generation.
+                  Results will be compared for best output.
+                </p>
+              </div>
+
+              <!-- Model Stats -->
+              <div class="grid grid-cols-3 gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                <div class="text-center">
+                  <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ availableModels.length }}</p>
+                  <p class="text-xs text-gray-600 dark:text-gray-400">Total Models</p>
+                </div>
+                <div class="text-center">
+                  <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ uniqueProviders.length }}</p>
+                  <p class="text-xs text-gray-600 dark:text-gray-400">Providers</p>
+                </div>
+                <div class="text-center">
+                  <p class="text-2xl font-bold text-gray-900 dark:text-white">
+                    {{ modelStrategy === 'manual' ? selectedModels.length : 
+                       modelStrategy === 'recommended' ? recommendedModels.length : 
+                       availableModels.length }}
+                  </p>
+                  <p class="text-xs text-gray-600 dark:text-gray-400">Active</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <button
             @click="generateCode"
             :disabled="!canGenerate || isGenerating"
@@ -380,7 +521,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import {
   Upload,
   FileText,
@@ -440,6 +581,14 @@ const isUploading = ref(false)
 const uploadProgress = ref(0)
 const showTemplates = ref(false)
 const isDragOver = ref(false)
+
+// Model selection
+const loadingModels = ref(false)
+const modelsError = ref('')
+const availableModels = ref<any[]>([])
+const recommendedModels = ref<any[]>([])
+const selectedModels = ref<string[]>([])
+const modelStrategy = ref('recommended') // 'recommended', 'manual', 'all'
 
 const fileInput = ref<HTMLInputElement>()
 
@@ -509,6 +658,81 @@ const canGenerate = computed(() => {
     return inputText.value.trim().length > 0
   }
 })
+
+const uniqueProviders = computed(() => {
+  return [...new Set(availableModels.value.map(m => m.provider))]
+})
+
+// Methods
+const fetchModels = async () => {
+  loadingModels.value = true
+  modelsError.value = ''
+  
+  try {
+    const response = await fetch('http://localhost:8000/api/v1/models')
+    if (!response.ok) throw new Error('Failed to fetch models')
+    
+    const data = await response.json()
+    availableModels.value = data.models || []
+    
+    // Fetch recommended models
+    await fetchRecommendedModels()
+  } catch (error) {
+    console.error('Error fetching models:', error)
+    modelsError.value = 'Failed to load models. Please try again.'
+  } finally {
+    loadingModels.value = false
+  }
+}
+
+const fetchRecommendedModels = async () => {
+  try {
+    const response = await fetch(
+      `http://localhost:8000/api/v1/models/recommend?language=${selectedLanguage.value}&complexity=${complexityLevel.value}&max_models=3`,
+      { method: 'POST' }
+    )
+    if (!response.ok) throw new Error('Failed to fetch recommended models')
+    
+    const data = await response.json()
+    recommendedModels.value = data.models || []
+  } catch (error) {
+    console.error('Error fetching recommended models:', error)
+  }
+}
+
+const toggleModelSelection = (modelId: string) => {
+  const index = selectedModels.value.indexOf(modelId)
+  if (index > -1) {
+    selectedModels.value.splice(index, 1)
+  } else {
+    if (selectedModels.value.length < 3) {
+      selectedModels.value.push(modelId)
+    }
+  }
+}
+
+const onStrategyChange = () => {
+  if (modelStrategy.value === 'manual') {
+    selectedModels.value = []
+  }
+}
+
+const getProviderColor = (provider: string): string => {
+  const colors: { [key: string]: string } = {
+    'openai': 'bg-green-500',
+    'anthropic': 'bg-purple-500',
+    'google': 'bg-blue-500',
+    'cohere': 'bg-orange-500',
+  }
+  return colors[provider] || 'bg-gray-500'
+}
+
+const formatNumber = (num: number): string => {
+  if (num >= 1000) {
+    return (num / 1000).toFixed(0) + 'K'
+  }
+  return num.toString()
+}
 
 // Methods
 const onDrop = (event: DragEvent) => {
@@ -867,7 +1091,16 @@ const loadGeneration = (item: GenerationHistory) => {
 
 // Initialize
 onMounted(() => {
+  // Load models on mount
+  fetchModels()
   // Load recent files from localStorage in a real app
   console.log('GenerateView mounted')
+})
+
+// Watch for language or complexity changes to update recommendations
+watch([selectedLanguage, complexityLevel], () => {
+  if (modelStrategy.value === 'recommended') {
+    fetchRecommendedModels()
+  }
 })
 </script>

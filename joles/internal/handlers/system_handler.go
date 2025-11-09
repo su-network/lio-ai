@@ -171,7 +171,6 @@ func (h *SystemHandler) GetInfo(c *gin.Context) {
 		"endpoints": gin.H{
 			"health":    "/health",
 			"metrics":   "/api/v1/metrics",
-			"docs":      "/docs",
 			"documents": "/api/v1/documents",
 			"chats":     "/api/v1/chats",
 			"usage":     "/api/v1/usage",
