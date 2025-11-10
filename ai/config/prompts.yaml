@@ -1,0 +1,483 @@
+# Multi-Model Code Generation Prompts Configuration
+# These prompts are optimized for different languages, complexities, and use cases
+
+system_prompts:
+  base: |
+    You are an expert software engineer with deep knowledge of multiple programming languages, 
+    frameworks, and best practices. Your code is clean, efficient, well-documented, and follows 
+    industry standards.
+
+  code_generation: |
+    You are a world-class code generator specializing in producing production-ready, 
+    well-structured code. Your code includes:
+    - Clear, descriptive variable and function names
+    - Proper error handling and edge case management
+    - Comprehensive inline comments and documentation
+    - Type hints and type safety where applicable
+    - Efficient algorithms and data structures
+    - Security best practices
+    - Performance optimization
+    
+    Always follow the specific language's idioms and conventions.
+
+  test_generation: |
+    You are a testing expert who creates comprehensive unit tests with:
+    - High code coverage (>80%)
+    - Edge case testing
+    - Mock objects where needed
+    - Clear test descriptions
+    - Assertion clarity
+    - Setup and teardown when necessary
+
+  documentation: |
+    You are a technical writer who creates clear, comprehensive documentation including:
+    - Function/method docstrings with parameters and return types
+    - Usage examples
+    - API documentation
+    - Installation instructions
+    - Common pitfalls and troubleshooting
+
+# Language-specific templates
+language_templates:
+  python:
+    simple: |
+      Generate Python code for: {prompt}
+      
+      Requirements:
+      - Use Python 3.10+ features
+      - Follow PEP 8 style guide
+      - Include type hints
+      - Add docstrings for all functions
+      - Handle errors with try/except where appropriate
+      {framework_instruction}
+      {constraints_instruction}
+      
+      Context: {context}
+      
+      Provide clean, working code with comments explaining key logic.
+
+    intermediate: |
+      Generate production-grade Python code for: {prompt}
+      
+      Requirements:
+      - Python 3.10+ with modern features (dataclasses, typing, etc.)
+      - Follow PEP 8 and best practices
+      - Comprehensive type hints
+      - Detailed docstrings (Google or NumPy style)
+      - Robust error handling with custom exceptions
+      - Input validation
+      - Logging where appropriate
+      {framework_instruction}
+      {constraints_instruction}
+      
+      Context: {context}
+      
+      Include usage examples and handle edge cases.
+
+    advanced: |
+      Generate enterprise-level Python code for: {prompt}
+      
+      Requirements:
+      - Python 3.10+ with advanced features
+      - Design patterns (Factory, Strategy, Observer, etc.)
+      - SOLID principles
+      - Comprehensive type hints with Protocol, TypeVar, Generic
+      - Full documentation with examples
+      - Advanced error handling and validation
+      - Performance optimization
+      - Security considerations (input sanitization, SQL injection prevention)
+      - Async/await for I/O operations if beneficial
+      - Unit tests with pytest
+      {framework_instruction}
+      {constraints_instruction}
+      
+      Context: {context}
+      
+      Create maintainable, scalable, well-architected code.
+
+  go:
+    simple: |
+      Generate Go code for: {prompt}
+      
+      Requirements:
+      - Go 1.21+ features
+      - Follow Go conventions and idioms
+      - Proper error handling
+      - Package-level documentation
+      - Exported function comments
+      {framework_instruction}
+      {constraints_instruction}
+      
+      Context: {context}
+      
+      Provide clean, idiomatic Go code.
+
+    intermediate: |
+      Generate production-ready Go code for: {prompt}
+      
+      Requirements:
+      - Go 1.21+ with modern features
+      - Idiomatic Go style
+      - Comprehensive error handling with wrapped errors
+      - Context propagation for timeouts/cancellation
+      - Interfaces for abstraction
+      - Detailed comments and documentation
+      - Struct field tags where needed
+      {framework_instruction}
+      {constraints_instruction}
+      
+      Context: {context}
+      
+      Include proper concurrency patterns if needed (channels, goroutines, sync).
+
+    advanced: |
+      Generate enterprise-grade Go code for: {prompt}
+      
+      Requirements:
+      - Go 1.21+ with generics where beneficial
+      - Clean architecture (handlers, services, repositories)
+      - Interface-driven design
+      - Comprehensive error handling with custom error types
+      - Context propagation throughout
+      - Proper concurrency with sync primitives
+      - Performance optimization
+      - Memory efficiency
+      - Middleware patterns
+      - Logging with structured logs
+      - Unit tests with table-driven tests
+      {framework_instruction}
+      {constraints_instruction}
+      
+      Context: {context}
+      
+      Create scalable, maintainable, high-performance code.
+
+  javascript:
+    simple: |
+      Generate JavaScript code for: {prompt}
+      
+      Requirements:
+      - Modern ES6+ syntax
+      - Clear variable names
+      - Basic error handling
+      - Comments for key logic
+      {framework_instruction}
+      {constraints_instruction}
+      
+      Context: {context}
+
+    intermediate: |
+      Generate production JavaScript/TypeScript code for: {prompt}
+      
+      Requirements:
+      - Modern ES2022+ features
+      - TypeScript with proper types
+      - Async/await for asynchronous operations
+      - Error handling with try/catch
+      - JSDoc comments
+      - Input validation
+      {framework_instruction}
+      {constraints_instruction}
+      
+      Context: {context}
+
+    advanced: |
+      Generate enterprise JavaScript/TypeScript code for: {prompt}
+      
+      Requirements:
+      - TypeScript with strict mode
+      - Advanced types (generics, utility types, mapped types)
+      - Design patterns
+      - Comprehensive error handling
+      - Performance optimization
+      - Security best practices
+      - Unit tests with Jest
+      - Complete type definitions
+      {framework_instruction}
+      {constraints_instruction}
+      
+      Context: {context}
+
+  typescript:
+    simple: |
+      Generate TypeScript code for: {prompt}
+      
+      Requirements:
+      - TypeScript 5.0+ features
+      - Proper type annotations
+      - Interface definitions
+      - Clear structure
+      {framework_instruction}
+      {constraints_instruction}
+      
+      Context: {context}
+
+    intermediate: |
+      Generate production TypeScript code for: {prompt}
+      
+      Requirements:
+      - TypeScript 5.0+ with strict mode
+      - Comprehensive type definitions
+      - Interfaces and type aliases
+      - Generic types where beneficial
+      - JSDoc comments
+      - Error handling
+      - Validation
+      {framework_instruction}
+      {constraints_instruction}
+      
+      Context: {context}
+
+    advanced: |
+      Generate enterprise TypeScript code for: {prompt}
+      
+      Requirements:
+      - TypeScript 5.0+ with strictest settings
+      - Advanced types (conditional, mapped, template literal)
+      - Type guards and narrowing
+      - Branded types for type safety
+      - Comprehensive error handling
+      - Dependency injection
+      - SOLID principles
+      - Unit tests with Jest
+      - Complete type coverage
+      {framework_instruction}
+      {constraints_instruction}
+      
+      Context: {context}
+
+  rust:
+    simple: |
+      Generate Rust code for: {prompt}
+      
+      Requirements:
+      - Rust 2021 edition
+      - Ownership and borrowing
+      - Error handling with Result
+      - Documentation comments
+      {framework_instruction}
+      {constraints_instruction}
+      
+      Context: {context}
+
+    intermediate: |
+      Generate production Rust code for: {prompt}
+      
+      Requirements:
+      - Rust 2021 edition
+      - Idiomatic Rust patterns
+      - Proper error handling with thiserror/anyhow
+      - Lifetime annotations where needed
+      - Trait implementations
+      - Documentation with examples
+      - Unsafe code justification if needed
+      {framework_instruction}
+      {constraints_instruction}
+      
+      Context: {context}
+
+    advanced: |
+      Generate high-performance Rust code for: {prompt}
+      
+      Requirements:
+      - Rust 2021 with advanced features
+      - Zero-cost abstractions
+      - Advanced type system (GATs, associated types)
+      - Async/await with tokio
+      - Performance optimization
+      - Memory efficiency
+      - Comprehensive error handling
+      - Unsafe code with safety proofs
+      - Benchmarks
+      - Unit and integration tests
+      {framework_instruction}
+      {constraints_instruction}
+      
+      Context: {context}
+
+  java:
+    simple: |
+      Generate Java code for: {prompt}
+      
+      Requirements:
+      - Java 17+ features
+      - Proper class structure
+      - Exception handling
+      - Javadoc comments
+      {framework_instruction}
+      {constraints_instruction}
+      
+      Context: {context}
+
+    intermediate: |
+      Generate production Java code for: {prompt}
+      
+      Requirements:
+      - Java 17+ with modern features
+      - SOLID principles
+      - Proper encapsulation
+      - Exception handling hierarchy
+      - Comprehensive Javadoc
+      - Stream API where appropriate
+      - Optional for null safety
+      {framework_instruction}
+      {constraints_instruction}
+      
+      Context: {context}
+
+    advanced: |
+      Generate enterprise Java code for: {prompt}
+      
+      Requirements:
+      - Java 17+ with records, sealed classes
+      - Design patterns
+      - Dependency injection
+      - Thread safety considerations
+      - Performance optimization
+      - Comprehensive exception handling
+      - Unit tests with JUnit 5
+      - Complete Javadoc with examples
+      {framework_instruction}
+      {constraints_instruction}
+      
+      Context: {context}
+
+# Framework-specific instructions
+framework_instructions:
+  fastapi:
+    instruction: |
+      - Use FastAPI with proper route decorators
+      - Pydantic models for validation
+      - Dependency injection
+      - Async endpoints where beneficial
+      - OpenAPI documentation
+
+  gin:
+    instruction: |
+      - Use Gin framework patterns
+      - Proper middleware usage
+      - Route grouping
+      - JSON binding and validation
+      - Error handling with c.JSON
+
+  express:
+    instruction: |
+      - Use Express.js patterns
+      - Middleware functions
+      - Route handlers
+      - Error handling middleware
+      - Request validation
+
+  django:
+    instruction: |
+      - Follow Django conventions
+      - Class-based views or function views
+      - Django ORM queries
+      - Form validation
+      - Template rendering
+
+  react:
+    instruction: |
+      - React 18+ with hooks
+      - Functional components
+      - Props and state management
+      - useEffect for side effects
+      - TypeScript props interfaces
+
+  nextjs:
+    instruction: |
+      - Next.js 14+ patterns
+      - Server/Client components
+      - API routes
+      - Data fetching (SSR/SSG)
+      - TypeScript
+
+  spring:
+    instruction: |
+      - Spring Boot patterns
+      - Annotations (@Service, @Controller, @Repository)
+      - Dependency injection
+      - REST controllers
+      - JPA entities
+
+# Test generation templates
+test_templates:
+  python: |
+    Generate comprehensive pytest tests for the following code:
+    
+    {code}
+    
+    Requirements:
+    - Use pytest framework
+    - Include fixtures for setup
+    - Test happy paths and edge cases
+    - Mock external dependencies
+    - Aim for >80% coverage
+    - Clear test names following test_<feature>_<scenario>_<expected> pattern
+
+  go: |
+    Generate comprehensive Go tests for the following code:
+    
+    {code}
+    
+    Requirements:
+    - Use standard testing package
+    - Table-driven tests where applicable
+    - Test helper functions
+    - Mock interfaces
+    - Subtests with t.Run
+    - Clear test names: TestFunction_Scenario
+
+  javascript: |
+    Generate comprehensive Jest tests for the following code:
+    
+    {code}
+    
+    Requirements:
+    - Use Jest framework
+    - describe/it blocks
+    - beforeEach/afterEach for setup
+    - Mock dependencies with jest.mock
+    - Assertions with expect
+    - Test coverage >80%
+
+# Documentation templates
+documentation_templates:
+  readme: |
+    Generate a comprehensive README.md for:
+    
+    {code}
+    
+    Include:
+    - Project title and description
+    - Features list
+    - Installation instructions
+    - Usage examples
+    - API documentation
+    - Configuration options
+    - Contributing guidelines
+    - License information
+
+  api_docs: |
+    Generate API documentation for:
+    
+    {code}
+    
+    Include:
+    - Endpoint descriptions
+    - Request/response schemas
+    - Authentication requirements
+    - Example requests with curl
+    - Status codes
+    - Error responses
+
+# Constraint handling
+constraint_templates:
+  no-dependencies: "Use only standard library, no external dependencies"
+  type-safe: "Enforce strict type checking and type safety throughout"
+  minimal: "Create minimal implementation without extra features"
+  performance: "Optimize for performance and low latency"
+  security: "Prioritize security with input validation and sanitization"
+  async: "Use asynchronous patterns for I/O operations"
+  immutable: "Prefer immutable data structures"
+  functional: "Use functional programming paradigms"

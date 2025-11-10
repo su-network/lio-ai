@@ -71,7 +71,7 @@ export const useChatStore = defineStore('chat', () => {
   async function loadAvailableModels() {
     try {
       // Get models with status to filter only available ones
-      const statusResponse = await apiService.getModelsStatus()
+      const statusResponse = await apiService.getModelsStatus(userId.value)
       
       if (statusResponse && statusResponse.models) {
         // Filter only models that are available (have API keys)

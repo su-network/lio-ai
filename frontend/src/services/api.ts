@@ -1,4 +1,4 @@
-import axios from 'axios'
+import axios, { type AxiosError, type AxiosResponse } from 'axios'
 import type { AxiosInstance } from 'axios'
 import { deobfuscate, isObfuscated } from '@/utils/encryption'
 
@@ -10,15 +10,70 @@ const API_URL = import.meta.env.VITE_API_URL || ''
 // Enable response obfuscation (set to false to disable)
 const ENABLE_OBFUSCATION = import.meta.env.VITE_ENABLE_OBFUSCATION !== 'false'
 
-// Create axios instance
-const apiClient: AxiosInstance = axios.create({
-  baseURL: API_URL,
+// Enhanced error handling
+class ApiError extends Error {
+  constructor(
+    message: string,
+    public status?: number,
+    public code?: string,
+    public details?: any
+  ) {
+    super(message)
+    this.name = 'ApiError'
+  }
+}
+
+// Create axios instance with default config
+const apiClient = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080',
   timeout: 30000,
   headers: {
-    'Content-Type': 'application/json',
-    'X-Obfuscated': ENABLE_OBFUSCATION ? 'true' : 'false'
+    'Content-Type': 'application/json'
   }
 })
+
+// Response interceptor for consistent error handling
+apiClient.interceptors.response.use(
+  (response: AxiosResponse) => response,
+  (error: AxiosError) => {
+    if (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK') {
+      throw new ApiError(
+        'Unable to connect to server. Please ensure all services are running.',
+        0,
+        'NETWORK_ERROR'
+      )
+    }
+    
+    if (error.response?.status === 404) {
+      throw new ApiError(
+        'The requested resource was not found.',
+        404,
+        'NOT_FOUND'
+      )
+    }
+    
+    if (error.response?.status === 500) {
+      throw new ApiError(
+        'Server error occurred. Please try again later.',
+        500,
+        'SERVER_ERROR'
+      )
+    }
+    
+    const errorData = error.response?.data as any
+    const message = errorData?.error || error.message || 'An unknown error occurred'
+    throw new ApiError(message, error.response?.status)
+  }
+)
+
+// Helper function to handle empty responses
+const handleEmptyResponse = <T>(data: T | null | undefined, dataType: string, fallback: T): T => {
+  if (!data || (Array.isArray(data) && data.length === 0)) {
+    console.info(`No ${dataType} found, returning fallback data`)
+    return fallback
+  }
+  return data
+}
 
 // Request interceptor - add auth token
 apiClient.interceptors.request.use(
@@ -338,8 +393,11 @@ export const apiService = {
     }
   },
 
-  getModelsStatus: async (): Promise<any> => {
-    const response = await apiClient.get('/api/v1/models/status')
+  // Unified models status endpoint (with optional user scoping)
+  getModelsStatus: async (userId?: string): Promise<any> => {
+    const response = await apiClient.get('/api/v1/models/status', {
+      params: userId ? { user_id: userId } : {}
+    })
     return response.data
   },
 
@@ -406,13 +464,33 @@ export const apiService = {
     }, {
       params: { user_id: userId }
     })
+    
+    // Trigger model reload in AI service to sync the new API key
+    try {
+      await apiClient.post('/api/v1/models/reload', null, {
+        params: { user_id: userId }
+      })
+    } catch (error) {
+      console.warn('Failed to reload models after API key update:', error)
+    }
   },
 
   deleteProviderKey: async (userId: string, provider: string): Promise<void> => {
     await apiClient.delete(`/api/v1/api-keys/${provider}`, {
       params: { user_id: userId }
     })
-  }
+    
+    // Trigger model reload in AI service after deletion
+    try {
+      await apiClient.post('/api/v1/models/reload', null, {
+        params: { user_id: userId }
+      })
+    } catch (error) {
+      console.warn('Failed to reload models after API key deletion:', error)
+    }
+  },
+
+  // (duplicate removed above)
 }
 
 export default apiService

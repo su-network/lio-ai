@@ -5,7 +5,7 @@
       <div class="mb-8">
         <h1 class="text-4xl font-bold text-gray-900 dark:text-white mb-2">Settings</h1>
         <p class="text-lg text-gray-600 dark:text-gray-400">
-          Configure your API keys to unlock AI models
+          Add your API keys to enable AI models from different providers
         </p>
       </div>
 
@@ -127,22 +127,34 @@
                 <svg class="w-5 h-5 flex-shrink-0 mt-0.5 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 20 20">
                   <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
                 </svg>
-                <span><strong>Encrypted Storage:</strong> All keys are encrypted with AES-256</span>
+                <span><strong>Secure Encryption:</strong> Your keys are securely encrypted and stored</span>
               </li>
               <li class="flex items-start gap-2">
                 <svg class="w-5 h-5 flex-shrink-0 mt-0.5 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 20 20">
                   <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
                 </svg>
-                <span><strong>Private & Secure:</strong> Never shared with third parties</span>
+                <span><strong>Model Availability:</strong> Only models with valid keys will be available to use</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <svg class="w-5 h-5 flex-shrink-0 mt-0.5 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                </svg>
+                <span><strong>Manage Anytime:</strong> You can add, edit, or remove keys anytime</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <svg class="w-5 h-5 flex-shrink-0 mt-0.5 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                </svg>
+                <span><strong>Keep Private:</strong> Keep your keys private and generate new ones from your provider if needed</span>
               </li>
               <li class="flex items-start gap-2">
                 <svg class="w-5 h-5 flex-shrink-0 mt-0.5 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 20 20">
                   <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
                 </svg>
                 <span><strong>Get Keys:</strong> 
+                  <a href="https://makersuite.google.com/app/apikey" target="_blank" class="underline hover:text-blue-700">Google</a> • 
                   <a href="https://platform.openai.com" target="_blank" class="underline hover:text-blue-700">OpenAI</a> • 
                   <a href="https://console.anthropic.com" target="_blank" class="underline hover:text-blue-700">Anthropic</a> • 
-                  <a href="https://makersuite.google.com/app/apikey" target="_blank" class="underline hover:text-blue-700">Google</a> • 
                   <a href="https://dashboard.cohere.com" target="_blank" class="underline hover:text-blue-700">Cohere</a>
                 </span>
               </li>
