@@ -7,12 +7,35 @@
 # Environment & Secrets
 # ============================================
 .env
+.env.*
 .env.local
 .env.*.local
+.env.development
+.env.production
+.env.test
 .envrc
+
+# Security files
 *.key
 *.pem
+*.crt
+*.csr
+*.p12
+*.pfx
 secrets/
+secret/
+credentials/
+*.secret
+
+# Authentication & tokens
+*.token
+.jwt_secret
+auth_tokens/
+api_keys/
+
+# Database credentials
+database.yml
+db_config.yml
 
 # ============================================
 # Go Project
