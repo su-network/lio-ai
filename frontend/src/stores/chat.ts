@@ -55,7 +55,7 @@ export const useChatStore = defineStore('chat', () => {
     loadingChats.value = true
     error.value = null
     try {
-      const response = await apiService.getUserChats(userId.value, 50, 0)
+      const response = await apiService.getUserChats(50, 0)
       conversations.value = response.data.map(chat => ({
         ...chat,
         messages: []
@@ -70,39 +70,54 @@ export const useChatStore = defineStore('chat', () => {
 
   async function loadAvailableModels() {
     try {
-      // Get models with status to filter only available ones
-      const statusResponse = await apiService.getModelsStatus(userId.value)
-      
-      if (statusResponse && statusResponse.models) {
-        // Filter only models that are available (have API keys)
-        const availableModelsList = statusResponse.models
-          .filter((m: any) => m.status === 'available')
-          .map((m: any) => {
-            const modelConfig = m
-            return {
-              id: m.model_id,
-              name: modelConfig.model_name || m.model_id.replace(/-/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
-              description: `${m.provider} model`,
-              status: 'Online',
-              responseTime: `~${modelConfig.metrics?.average_latency_ms || 2000}ms`,
-              badges: modelConfig.capabilities?.special_features || [],
-              provider: m.provider,
-              context_length: modelConfig.capabilities?.context_window || 4096
-            }
-          })
-        
-        if (availableModelsList.length > 0) {
-          availableModels.value = availableModelsList
-          // Set first available model as default if current selection not available
-          const currentModelAvailable = availableModels.value.find(m => m.id === selectedModel.value)
-          if (!currentModelAvailable && availableModels.value[0]) {
-            selectedModel.value = availableModels.value[0].id
-            console.log('Auto-selected first available model:', selectedModel.value)
-          }
-        } else {
-          console.warn('No models with API keys available. Please configure API keys in Settings.')
-          availableModels.value = []
+      const [allModels, statusResponse] = await Promise.all([
+        apiService.getAllModels(),
+        apiService.getModelsStatus()
+      ])
+
+      const statusById = new Map<string, any>()
+      if (statusResponse?.models && Array.isArray(statusResponse.models)) {
+        for (const s of statusResponse.models) {
+          if (s?.model_id) statusById.set(s.model_id, s)
         }
+      }
+
+      const modelsWithStatus = (allModels || []).map((m: any) => {
+        const status = statusById.get(m.id)
+        const availabilityStatus = status?.status || 'unknown'
+        const isActive = availabilityStatus === 'available'
+
+        return {
+          ...m,
+          availabilityStatus,
+          availabilityReason: status?.reason || null,
+          isActive,
+          // Legacy fields used by components
+          badges: m?.capabilities?.special_features || [],
+          responseTime: m?.metrics?.average_latency_ms ? `~${m.metrics.average_latency_ms}ms` : undefined,
+          status: isActive ? 'Online' : 'Offline',
+          context_length: m?.capabilities?.context_window || 4096
+        }
+      })
+
+      // Sort: active first, then priority (lower first), then name
+      modelsWithStatus.sort((a: any, b: any) => {
+        const activeDelta = (b.isActive ? 1 : 0) - (a.isActive ? 1 : 0)
+        if (activeDelta !== 0) return activeDelta
+        const prA = typeof a.priority === 'number' ? a.priority : 999
+        const prB = typeof b.priority === 'number' ? b.priority : 999
+        if (prA !== prB) return prA - prB
+        return String(a.name || a.id).localeCompare(String(b.name || b.id))
+      })
+
+      availableModels.value = modelsWithStatus
+
+      // Keep selectedModel on an active model when possible
+      const selected = availableModels.value.find(m => m.id === selectedModel.value)
+      const firstActive = availableModels.value.find(m => (m as any).isActive)
+      if (selected && !(selected as any).isActive && firstActive) {
+        selectedModel.value = firstActive.id
+        console.log('Auto-selected first active model:', selectedModel.value)
       }
     } catch (err: any) {
       console.error('Error loading available models:', err)
@@ -131,7 +146,7 @@ export const useChatStore = defineStore('chat', () => {
   async function createConversation(title: string) {
     error.value = null
     try {
-      const chat = await apiService.createChat(userId.value, title)
+      const chat = await apiService.createChat(title)
       const newConversation: ConversationWithMessages = {
         ...chat,
         messages: []
@@ -251,71 +266,53 @@ export const useChatStore = defineStore('chat', () => {
         conversation.messages[userMsgIndex] = savedUserMessage
       }
 
+      // Call the chat completion API
       let aiResponse = ''
       let usedModel = selectedModel.value
       
       try {
-        // Call the AI generation API through the Go gateway
-        const response = await fetch('/api/generate', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            prompt: content,
-            language: 'python',
-            complexity: 'simple',
-            selected_models: [selectedModel.value],
-            max_models: 1,
-            timeout: 30,
-            user_id: userId.value
-          })
-        })
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
-          throw new Error(errorData.error || `API Error: ${response.status}`)
-        }
-
-        const result = await response.json()
+        const result = await apiService.chatCompletion(
+          conversation.id,
+          content,
+          selectedModel.value
+        )
         
-        if (result.status === 'success' && result.model_responses && result.model_responses.length > 0) {
-          const modelResponse = result.model_responses[0]
-          aiResponse = modelResponse.generated_code || modelResponse.response || 'No response generated'
-          usedModel = modelResponse.model_id || selectedModel.value
-          
-          // Format the response nicely
-          if (modelResponse.generated_code) {
-            aiResponse = `Here's the generated code:\n\n\`\`\`python\n${modelResponse.generated_code}\n\`\`\`\n\n*Generated by ${getModelDisplayName(usedModel)}*`
-          }
-        } else if (result.consensus_code) {
-          aiResponse = `\`\`\`python\n${result.consensus_code}\n\`\`\`\n\n*Generated by ${getModelDisplayName(result.best_model || selectedModel.value)}*`
-          usedModel = result.best_model || selectedModel.value
-        } else {
-          throw new Error('No valid response from AI service')
+        aiResponse = result.content
+        usedModel = selectedModel.value
+        
+        // Add assistant message
+        const assistantMessage: Message = {
+          id: result.message_id,
+          chat_id: conversation.id,
+          role: 'assistant',
+          content: aiResponse,
+          model: usedModel,
+          tokens: result.tokens,
+          created_at: new Date().toISOString()
         }
+        conversation.messages.push(assistantMessage)
+        
       } catch (apiError: any) {
-        console.error('AI generation error:', apiError)
-        // Fallback response
+        console.error('Chat completion error:', apiError)
+        // Create error response message
         aiResponse = `I apologize, but I encountered an error while processing your request: ${apiError.message}
-        
+
 Please make sure:
 1. You have configured your API keys in Settings
 2. The selected model (${getModelDisplayName(selectedModel.value)}) is available
 3. Your API key has sufficient credits
 
 You can check available models and configure API keys in the Settings page.`
+        
+        // Save error message as assistant response
+        const errorMessage = await apiService.addMessage(
+          conversation.id,
+          'assistant',
+          aiResponse,
+          usedModel
+        )
+        conversation.messages.push(errorMessage)
       }
-
-      // Save assistant message to API
-      const assistantMessage = await apiService.addMessage(
-        conversation.id,
-        'assistant',
-        aiResponse,
-        usedModel
-      )
-      
-      conversation.messages.push(assistantMessage)
 
       // Update conversation updated_at
       conversation.updated_at = new Date().toISOString()
@@ -351,7 +348,7 @@ You can check available models and configure API keys in the Settings page.`
     try {
       // Delete and recreate the chat
       await apiService.deleteChat(conversation.id)
-      const newChat = await apiService.createChat(userId.value, conversation.title)
+      const newChat = await apiService.createChat(conversation.title)
       
       // Update local state
       const index = conversations.value.findIndex(c => c.id === conversation.id)

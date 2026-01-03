@@ -1,120 +1,120 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { apiService } from '@/services/api'
 
 interface User {
-  id: string
+  id: number // Changed from string to number for JWT user_id
   name: string
   email: string
-  avatar: string
-}
-
-/**
- * Generate a unique user ID based on browser fingerprint
- */
-function generateUserId(): string {
-  // Check if we already have a user ID in localStorage
-  const existingId = localStorage.getItem('lioai_user_id')
-  if (existingId) return existingId
-
-  // Generate a unique ID based on browser characteristics
-  const nav = navigator as any
-  const screen = window.screen
-  
-  const fingerprint = [
-    nav.userAgent,
-    nav.language,
-    screen.width,
-    screen.height,
-    screen.colorDepth,
-    new Date().getTimezoneOffset(),
-    nav.hardwareConcurrency || 'unknown',
-    nav.platform
-  ].join('|')
-
-  // Create a simple hash
-  let hash = 0
-  for (let i = 0; i < fingerprint.length; i++) {
-    const char = fingerprint.charCodeAt(i)
-    hash = ((hash << 5) - hash) + char
-    hash = hash & hash // Convert to 32bit integer
-  }
-
-  // Create a user ID with timestamp for uniqueness
-  const userId = `user_${Math.abs(hash).toString(36)}_${Date.now().toString(36)}`
-  
-  // Save to localStorage
-  localStorage.setItem('lioai_user_id', userId)
-  
-  return userId
+  avatar?: string
 }
 
 export const useUserStore = defineStore('user', () => {
   const router = useRouter()
   const user = ref<User | null>(null)
-  const userId = ref<string>('')
+  const userId = computed(() => user.value?.id || 0)
+  const isAuthenticated = ref(false)
+  const isInitialized = ref(false)
 
-  // Initialize user ID
-  if (typeof window !== 'undefined') {
-    userId.value = generateUserId()
-    
-    // Load user from localStorage on store init
-    const saved = localStorage.getItem('lioai_user')
-    if (saved) {
-      try {
-        const parsedUser = JSON.parse(saved)
-        user.value = {
-          ...parsedUser,
-          id: userId.value // Ensure ID is always set
-        }
-      } catch {}
-    } else {
-      // Create a default anonymous user
+  // Initialize user from httpOnly cookie (auth_token)
+  const initializeUser = async () => {
+    // The JWT token is in httpOnly cookie, so we just try to fetch the profile
+    // If the cookie exists and is valid, the request will succeed
+    try {
+      const profile = await apiService.getProfile()
       user.value = {
-        id: userId.value,
-        name: 'Anonymous User',
-        email: `${userId.value}@lio-ai.local`,
-        avatar: `https://api.dicebear.com/8.x/avataaars/svg?seed=${userId.value}`
+        id: profile.id,
+        name: profile.name,
+        email: profile.email,
+        avatar: profile.avatar || `https://api.dicebear.com/8.x/avataaars/svg?seed=${profile.email}`
       }
-      localStorage.setItem('lioai_user', JSON.stringify(user.value))
+      isAuthenticated.value = true
+      
+      // Trigger API key sync on login to ensure models are available
+      try {
+        await apiService.syncApiKeys()
+        console.log('✓ API keys synced on user initialization')
+      } catch (syncError) {
+        console.warn('Failed to sync API keys:', syncError)
+        // Don't fail initialization if sync fails
+      }
+    } catch (error) {
+      console.error('Failed to load user profile:', error)
+      // No valid cookie, user needs to log in
+      isAuthenticated.value = false
+      user.value = null
+    }
+    isInitialized.value = true
+  }
+
+  const isLoggedIn = computed(() => isAuthenticated.value && !!user.value)
+
+  async function register(username: string, email: string, password: string, name: string) {
+    try {
+      const response = await apiService.register(username, email, password, name)
+      
+      // Token is stored in httpOnly cookie by the server
+      // No need to store in localStorage
+      
+      user.value = {
+        id: response.user.id,
+        name: response.user.name,
+        email: response.user.email,
+        avatar: `https://api.dicebear.com/8.x/avataaars/svg?seed=${email}`
+      }
+      isAuthenticated.value = true
+      router.push('/')
+      return { success: true }
+    } catch (error: any) {
+      return { 
+        success: false, 
+        error: error.response?.data?.error || 'Registration failed' 
+      }
     }
   }
 
-  const isLoggedIn = computed(() => !!user.value)
-
-  async function login(email: string, name: string) {
-    // Simulate an API call
-    await new Promise(resolve => setTimeout(resolve, 500))
-    user.value = {
-      id: userId.value,
-      name,
-      email,
-      avatar: `https://api.dicebear.com/8.x/avataaars/svg?seed=${email}`
+  async function login(email: string, password: string) {
+    try {
+      const response = await apiService.login(email, password)
+      
+      // Token is stored in httpOnly cookie by the server
+      // No need to store in localStorage
+      
+      user.value = {
+        id: response.user.id,
+        name: response.user.name,
+        email: response.user.email,
+        avatar: `https://api.dicebear.com/8.x/avataaars/svg?seed=${email}`
+      }
+      isAuthenticated.value = true
+      router.push('/')
+      return { success: true }
+    } catch (error: any) {
+      return { 
+        success: false, 
+        error: error.response?.data?.error || 'Login failed' 
+      }
     }
-    // Save to localStorage
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('lioai_user', JSON.stringify(user.value))
-    }
-    router.push('/')
   }
 
-  function logout() {
-    user.value = null
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('lioai_user')
-      // Don't remove user_id, keep for tracking
+  async function logout() {
+    try {
+      await apiService.logout()
+    } catch (error) {
+      console.error('Logout error:', error)
+    } finally {
+      user.value = null
+      isAuthenticated.value = false
+      // Cookie will be cleared by the server on logout
+      router.push('/login')
     }
-    router.push('/login')
   }
 
   function updateProfile(newName: string, newAvatarSeed: string) {
     if (user.value) {
       user.value.name = newName
       user.value.avatar = `https://api.dicebear.com/8.x/avataaars/svg?seed=${encodeURIComponent(newAvatarSeed)}`
-      // Save to localStorage
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('lioai_user', JSON.stringify(user.value))
-      }
     }
   }
 
@@ -122,8 +122,12 @@ export const useUserStore = defineStore('user', () => {
     user,
     userId,
     isLoggedIn,
+    isAuthenticated,
+    isInitialized,
+    register,
     login,
     logout,
-    updateProfile
+    updateProfile,
+    initializeUser
   }
 })

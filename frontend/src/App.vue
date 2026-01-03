@@ -108,50 +108,6 @@
             </button>
           </div>
 
-          <!-- Projects -->
-          <router-link
-            to="/projects"
-            :class="[
-              'flex items-center px-4 py-3 rounded-xl font-medium text-sm transition-all duration-200',
-              isSidebarCollapsed ? 'justify-center px-2' : 'space-x-3',
-              $route.path === '/projects' 
-                ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300' 
-                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-            ]"
-          >
-            <FolderOpen class="w-5 h-5 flex-shrink-0" />
-            <span
-              :class="[
-                'transition-all duration-300 whitespace-nowrap',
-                isSidebarCollapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'
-              ]"
-            >
-              Projects
-            </span>
-          </router-link>
-
-          <!-- Templates -->
-          <router-link
-            to="/templates"
-            :class="[
-              'flex items-center px-4 py-3 rounded-xl font-medium text-sm transition-all duration-200',
-              isSidebarCollapsed ? 'justify-center px-2' : 'space-x-3',
-              $route.path === '/templates' 
-                ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300' 
-                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-            ]"
-          >
-            <Layout class="w-5 h-5 flex-shrink-0" />
-            <span
-              :class="[
-                'transition-all duration-300 whitespace-nowrap',
-                isSidebarCollapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'
-              ]"
-            >
-              Templates
-            </span>
-          </router-link>
-
           <!-- Models -->
           <router-link
             to="/models"
@@ -375,8 +331,6 @@ import {
   Menu,
   Check,
   X,
-  FolderOpen,
-  Layout,
   Layers,
   Sparkles
 } from 'lucide-vue-next'

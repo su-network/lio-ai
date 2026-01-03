@@ -9,6 +9,12 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: false }
   },
   {
+    path: '/register',
+    name: 'Register',
+    component: () => import('@/views/RegisterView.vue'),
+    meta: { requiresAuth: false }
+  },
+  {
     path: '/',
     name: 'Chat',
     component: () => import('@/views/ChatView.vue'),
@@ -57,13 +63,19 @@ const router = createRouter({
   routes
 })
 
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   const userStore = useUserStore()
+  
+  // Wait for user store to initialize if not already done
+  if (!userStore.isInitialized) {
+    await userStore.initializeUser()
+  }
+  
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
 
   if (requiresAuth && !userStore.isLoggedIn) {
     next('/login')
-  } else if (to.path === '/login' && userStore.isLoggedIn) {
+  } else if ((to.path === '/login' || to.path === '/register') && userStore.isLoggedIn) {
     next('/')
   } else if (to.path === '/' && !userStore.isLoggedIn) {
     next('/login')

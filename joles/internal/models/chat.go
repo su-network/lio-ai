@@ -31,8 +31,7 @@ type ChatWithMessages struct {
 
 // ChatRequest represents the request to create a new chat
 type ChatRequest struct {
-	UserID string `json:"user_id" binding:"required"`
-	Title  string `json:"title" binding:"required"`
+	Title string `json:"title" binding:"required"`
 }
 
 // MessageRequest represents the request to send a message

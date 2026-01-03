@@ -3,6 +3,7 @@ package repositories
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -110,8 +111,10 @@ func (r *ChatRepository) GetChatsByUserID(userID string, limit, offset int) ([]m
 		LIMIT ? OFFSET ?
 	`
 
+	log.Printf("✓ GetChatsByUserID: Executing query with userID=%s, limit=%d, offset=%d", userID, limit, offset)
 	rows, err := r.db.Query(query, userID, limit, offset)
 	if err != nil {
+		log.Printf("❌ GetChatsByUserID: Query failed: %v", err)
 		return nil, fmt.Errorf("failed to get chats: %w", err)
 	}
 	defer rows.Close()
@@ -134,6 +137,7 @@ func (r *ChatRepository) GetChatsByUserID(userID string, limit, offset int) ([]m
 		chats = append(chats, chat)
 	}
 
+	log.Printf("✓ GetChatsByUserID: Found %d chats for userID=%s", len(chats), userID)
 	return chats, nil
 }
 

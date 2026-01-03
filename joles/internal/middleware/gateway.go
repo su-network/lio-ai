@@ -85,8 +85,31 @@ func LoggingMiddleware() gin.HandlerFunc {
 // CORSMiddleware enables CORS.
 func CORSMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		origin := c.Request.Header.Get("Origin")
+		
+		// List of allowed origins
+		allowedOrigins := []string{
+			"http://localhost:3000",
+			"http://127.0.0.1:3000",
+			"http://localhost:5173",
+			"http://127.0.0.1:5173",
+		}
+		
+		// Check if origin is allowed
+		isAllowed := false
+		for _, allowedOrigin := range allowedOrigins {
+			if origin == allowedOrigin {
+				isAllowed = true
+				break
+			}
+		}
+		
+		// Set CORS headers
+		if isAllowed {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		}
+		
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")
 

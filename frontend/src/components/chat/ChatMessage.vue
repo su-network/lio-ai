@@ -12,7 +12,7 @@
           ? 'w-full max-w-full'
           : 'max-w-[85%] sm:max-w-2xl',
         message.role === 'user'
-          ? 'bg-gray-800 dark:bg-gray-700 text-white border border-gray-700 dark:border-gray-600'
+          ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-600'
           : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700'
       ]"
     >

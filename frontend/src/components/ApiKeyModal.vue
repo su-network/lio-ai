@@ -249,6 +249,24 @@ const providers = [
     name: 'Cohere',
     models: 'Command R+',
     color: 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400'
+  },
+  {
+    id: 'ollama',
+    name: 'Ollama',
+    models: 'Local Models',
+    color: 'bg-gray-100 dark:bg-gray-900/30 text-gray-600 dark:text-gray-400'
+  },
+  {
+    id: 'bedrock',
+    name: 'AWS Bedrock',
+    models: 'Claude, Llama',
+    color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400'
+  },
+  {
+    id: 'azure',
+    name: 'Azure OpenAI',
+    models: 'GPT-4, GPT-3.5',
+    color: 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400'
   }
 ]
 
@@ -283,6 +301,21 @@ const providerInfo: Record<string, any> = {
     name: 'Cohere',
     description: 'Access Command R+ and other Cohere models',
     url: 'https://dashboard.cohere.com/api-keys'
+  },
+  ollama: {
+    name: 'Ollama',
+    description: 'Run open-source models locally (Llama 3, Mistral, Code Llama, etc.)',
+    url: 'https://ollama.ai/'
+  },
+  bedrock: {
+    name: 'AWS Bedrock',
+    description: 'Access Claude, Llama, and other models via AWS Bedrock',
+    url: 'https://console.aws.amazon.com/bedrock/'
+  },
+  azure: {
+    name: 'Azure OpenAI',
+    description: 'Access OpenAI models through Microsoft Azure',
+    url: 'https://portal.azure.com/#create/Microsoft.CognitiveServicesOpenAI'
   }
 }
 
@@ -308,7 +341,6 @@ const saveApiKey = async () => {
     success.value = false
 
     await apiService.createProviderKey(
-      userStore.userId,
       form.value.provider,
       form.value.apiKey,
       form.value.modelsEnabled
@@ -321,7 +353,13 @@ const saveApiKey = async () => {
     }, 1500)
 
   } catch (err: any) {
-    error.value = err.response?.data?.error || 'Failed to save API key'
+    console.error('Save API Key Error:', err)
+    console.error('Response data:', err.response?.data)
+    
+    // Show detailed error message
+    const errorMsg = err.response?.data?.error || 'Failed to save API key'
+    const details = err.response?.data?.details
+    error.value = details ? `${errorMsg}: ${details}` : errorMsg
   } finally {
     loading.value = false
   }

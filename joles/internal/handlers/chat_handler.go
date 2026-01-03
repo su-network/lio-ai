@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	"encoding/json"
+	"errors"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -21,15 +24,32 @@ func NewChatHandler(service *services.ChatService) *ChatHandler {
 
 // CreateChat handles POST /api/v1/chats
 func (h *ChatHandler) CreateChat(c *gin.Context) {
-	var req models.ChatRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	// Get authenticated user from JWT token
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "authentication required",
+			"code":  "UNAUTHORIZED",
+		})
 		return
 	}
 
-	chat, err := h.service.CreateChat(req.UserID, req.Title)
+	var req models.ChatRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "invalid request",
+			"code":  "INVALID_REQUEST",
+		})
+		return
+	}
+
+	// Use authenticated user's ID, NOT client-provided one
+	chat, err := h.service.CreateChat(userID.(string), req.Title)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to create chat",
+			"code":  "CREATE_FAILED",
+		})
 		return
 	}
 
@@ -38,15 +58,38 @@ func (h *ChatHandler) CreateChat(c *gin.Context) {
 
 // GetChat handles GET /api/v1/chats/:id
 func (h *ChatHandler) GetChat(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid chat id"})
+	// Get authenticated user
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "authentication required",
+			"code":  "UNAUTHORIZED",
+		})
 		return
 	}
 
-	chat, err := h.service.GetChat(id)
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "invalid chat id",
+			"code":  "INVALID_ID",
+		})
+		return
+	}
+
+	chat, err := h.service.GetChat(id, userID.(string))
+	if err != nil {
+		if err == services.ErrUnauthorized {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "access denied",
+				"code":  "FORBIDDEN",
+			})
+			return
+		}
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "chat not found",
+			"code":  "NOT_FOUND",
+		})
 		return
 	}
 
@@ -70,20 +113,56 @@ func (h *ChatHandler) GetChatByUUID(c *gin.Context) {
 	c.JSON(http.StatusOK, chat)
 }
 
-// GetUserChats handles GET /api/v1/chats?user_id=xxx
+// GetUserChats handles GET /api/v1/chats
 func (h *ChatHandler) GetUserChats(c *gin.Context) {
-	userID := c.Query("user_id")
-	if userID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id is required"})
+	// Get authenticated user from JWT token
+	userID, exists := c.Get("user_id")
+	if !exists {
+		log.Println("❌ GetUserChats: user_id not found in context")
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "authentication required",
+			"code":  "UNAUTHORIZED",
+		})
 		return
 	}
+
+	// Log the userID for debugging
+	log.Printf("✓ GetUserChats: userID from context: %v (type: %T)", userID, userID)
 
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 
-	chats, total, err := h.service.GetUserChats(userID, limit, offset)
+	// Validate limit
+	if limit > 100 {
+		limit = 100
+	}
+	if limit < 1 {
+		limit = 20
+	}
+
+	// Convert userID to string safely
+	userIDStr, ok := userID.(string)
+	if !ok {
+		log.Printf("❌ GetUserChats: userID type assertion failed, got type: %T", userID)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "invalid user context",
+			"code":  "INVALID_USER_CONTEXT",
+		})
+		return
+	}
+
+	log.Printf("✓ GetUserChats: calling service with userID=%s, limit=%d, offset=%d", userIDStr, limit, offset)
+
+	// Use authenticated user's ID, NOT query parameter
+	chats, total, err := h.service.GetUserChats(userIDStr, limit, offset)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		// Log detailed error
+		c.Error(err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to fetch chats",
+			"code":  "FETCH_FAILED",
+			"details": err.Error(),
+		})
 		return
 	}
 
@@ -230,7 +309,36 @@ func (h *ChatHandler) ChatCompletion(c *gin.Context) {
 
 	response, err := h.service.CreateChatCompletion(&req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		// Preserve upstream AI service status codes (e.g., 429 rate limit)
+		var aiErr *services.AIServiceError
+		if errors.As(err, &aiErr) && aiErr != nil {
+			status := aiErr.StatusCode
+			if status == 0 {
+				status = http.StatusBadGateway
+			}
+
+			detail := aiErr.Error()
+			// Try extracting a clean "detail" from the upstream JSON
+			var upstream struct {
+				Detail  string `json:"detail"`
+				Message string `json:"message"`
+				Error   string `json:"error"`
+			}
+			if json.Unmarshal([]byte(aiErr.Body), &upstream) == nil {
+				if upstream.Detail != "" {
+					detail = upstream.Detail
+				} else if upstream.Message != "" {
+					detail = upstream.Message
+				} else if upstream.Error != "" {
+					detail = upstream.Error
+				}
+			}
+
+			c.JSON(status, gin.H{"detail": detail})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
 		return
 	}
 

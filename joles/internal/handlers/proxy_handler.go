@@ -36,8 +36,20 @@ func (ph *ProxyHandler) ProxyRequest(c *gin.Context) {
 		}
 	}
 
-	// Build target URL
-	targetURL := ph.targetURL + c.Request.RequestURI
+	// Build target URL - preserve query parameters
+	targetURL := ph.targetURL + c.Request.URL.Path
+	
+	// Add user_id from JWT to query parameters if authenticated
+	query := c.Request.URL.Query()
+	if userID, exists := c.Get("user_id"); exists {
+		// Add user_id to query string for backend API
+		query.Set("user_id", userID.(string))
+	}
+	
+	// Reconstruct URL with query parameters
+	if len(query) > 0 {
+		targetURL += "?" + query.Encode()
+	}
 
 	// Create new request
 	proxyReq, err := http.NewRequest(

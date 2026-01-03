@@ -22,8 +22,14 @@
             >
               <!-- Online status indicator -->
               <span class="flex h-2 w-2 relative">
-                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                <span
+                  v-if="isSelectedModelActive"
+                  class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"
+                ></span>
+                <span
+                  class="relative inline-flex rounded-full h-2 w-2"
+                  :class="isSelectedModelActive ? 'bg-green-500' : 'bg-red-500'"
+                ></span>
               </span>
               <span class="text-sm font-medium text-gray-900 dark:text-white truncate max-w-[150px] sm:max-w-none">
                 {{ getModelDisplayName(selectedModel) }}
@@ -51,7 +57,10 @@
                 <div class="flex items-center justify-between w-full mb-1">
                   <div class="flex items-center gap-2">
                     <!-- Online indicator -->
-                    <span class="flex h-2 w-2 rounded-full bg-green-500"></span>
+                    <span
+                      class="flex h-2 w-2 rounded-full"
+                      :class="(model as any).isActive ? 'bg-green-500' : 'bg-red-500'"
+                    ></span>
                     <span class="text-sm font-medium text-gray-900 dark:text-white">{{ model.name }}</span>
                   </div>
                   <div v-if="selectedModel === model.id" class="flex items-center">
@@ -210,7 +219,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, defineProps, defineEmits } from 'vue'
+import { ref, defineProps, defineEmits, computed } from 'vue'
 import { ChevronDown } from 'lucide-vue-next'
 import { 
   DropdownMenuRoot,
@@ -259,6 +268,11 @@ const getModelDisplayName = (modelId: string): string => {
   return model?.name || modelId
 }
 
+const isSelectedModelActive = computed(() => {
+  const m: any = props.availableModels?.find((x: any) => x.id === props.selectedModel)
+  return Boolean(m?.isActive)
+})
+
 const formatContextLength = (length: number): string => {
   if (length >= 1000000) {
     return `${(length / 1000000).toFixed(1)}M context`
@@ -269,8 +283,8 @@ const formatContextLength = (length: number): string => {
 }
 
 const getModelStatusColor = (modelId: string): string => {
-  // All models shown are available (have API keys), so always show green
-  return 'bg-green-500'
+  const m: any = props.availableModels?.find((x: any) => x.id === modelId)
+  return m?.isActive ? 'bg-green-500' : 'bg-red-500'
 }
 
 const getBadgeClass = (badge: string): string => {

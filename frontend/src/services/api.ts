@@ -25,8 +25,11 @@ class ApiError extends Error {
 
 // Create axios instance with default config
 const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080',
+  // Use empty baseURL to make requests relative (go through Vite proxy in dev)
+  // In production, set VITE_API_URL environment variable
+  baseURL: import.meta.env.VITE_API_URL || '',
   timeout: 30000,
+  withCredentials: true, // Enable sending cookies with requests
   headers: {
     'Content-Type': 'application/json'
   }
@@ -75,13 +78,44 @@ const handleEmptyResponse = <T>(data: T | null | undefined, dataType: string, fa
   return data
 }
 
-// Request interceptor - add auth token
+// Helper function to get CSRF token from cookie
+function getCsrfToken(): string | null {
+  const name = '_csrf='
+  const cookies = document.cookie.split(';')
+  for (let cookie of cookies) {
+    cookie = cookie.trim()
+    if (cookie.startsWith(name)) {
+      const value = cookie.substring(name.length)
+      // Decode the cookie value if it's URL encoded
+      try {
+        return decodeURIComponent(value)
+      } catch (e) {
+        return value
+      }
+    }
+  }
+  return null
+}
+
+// Request interceptor - add CSRF token for state-changing requests
+// Auth token is automatically sent via httpOnly cookie
 apiClient.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('auth_token')
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
+    // No need to manually add Authorization header - httpOnly cookie handles it
+    
+    // Add CSRF token for state-changing requests
+    if (config.method && ['post', 'put', 'delete', 'patch'].includes(config.method.toLowerCase())) {
+      const csrfToken = getCsrfToken()
+      console.log('[CSRF] CSRF Token from cookie:', csrfToken)
+      console.log('[CSRF] Request URL:', config.url)
+      if (csrfToken) {
+        config.headers['X-CSRF-Token'] = csrfToken
+        console.log('[CSRF] Added X-CSRF-Token header:', csrfToken)
+      } else {
+        console.warn('[CSRF] No CSRF token found in cookies')
+      }
     }
+    
     return config
   },
   (error) => {
@@ -103,7 +137,7 @@ apiClient.interceptors.response.use(
   },
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('auth_token')
+      // Cookie expired or invalid - redirect to login
       window.location.href = '/login'
     }
     return Promise.reject(error)
@@ -246,6 +280,35 @@ export interface StatsResponse {
 
 // API Service
 export const apiService = {
+  // Authentication endpoints
+  register: async (username: string, email: string, password: string, fullName: string) => {
+    const response = await apiClient.post('/api/v1/auth/register', { 
+      username,
+      email, 
+      password,
+      full_name: fullName
+    })
+    return response.data
+  },
+
+  login: async (email: string, password: string) => {
+    const response = await apiClient.post('/api/v1/auth/login', { 
+      email, 
+      password 
+    })
+    return response.data
+  },
+
+  logout: async () => {
+    const response = await apiClient.post('/api/v1/auth/logout')
+    return response.data
+  },
+
+  getProfile: async () => {
+    const response = await apiClient.get('/api/v1/auth/profile')
+    return response.data
+  },
+
   // Health check
   getHealth: async () => {
     const response = await apiClient.get('/health')
@@ -278,14 +341,14 @@ export const apiService = {
   },
 
   // Chat endpoints
-  createChat: async (userId: string, title: string): Promise<Chat> => {
-    const response = await apiClient.post('/api/v1/chats', { user_id: userId, title })
+  createChat: async (title: string): Promise<Chat> => {
+    const response = await apiClient.post('/api/v1/chats', { title })
     return response.data
   },
 
-  getUserChats: async (userId: string, limit = 20, offset = 0): Promise<{ data: Chat[], total: number }> => {
+  getUserChats: async (limit = 20, offset = 0): Promise<{ data: Chat[], total: number }> => {
     const response = await apiClient.get('/api/v1/chats', {
-      params: { user_id: userId, limit, offset }
+      params: { limit, offset }
     })
     return response.data
   },
@@ -323,17 +386,40 @@ export const apiService = {
     return response.data
   },
 
+  // Chat completion endpoint
+  chatCompletion: async (
+    chatId: number, 
+    message: string, 
+    model?: string
+  ): Promise<{ content: string, message_id: number, tokens?: number }> => {
+    try {
+      const response = await apiClient.post('/api/v1/chat/completions', {
+        chat_id: chatId,
+        message: message,
+        model: model || 'gemini-2.5-pro'
+      })
+      return {
+        content: response.data.content,
+        message_id: response.data.message_id,
+        tokens: response.data.tokens
+      }
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail
+      const message = err?.response?.data?.message
+      const fallback = err?.message || 'Chat completion failed'
+      throw new Error(detail || message || fallback)
+    }
+  },
+
   // Usage endpoints
-  getQuotaStatus: async (userId: string): Promise<UsageQuota> => {
-    const response = await apiClient.get('/api/v1/usage/quota', {
-      params: { user_id: userId }
-    })
+  getQuotaStatus: async (): Promise<UsageQuota> => {
+    const response = await apiClient.get('/api/v1/usage/quota')
     return response.data
   },
 
-  getUsageSummary: async (userId: string, period: 'daily' | 'monthly' | 'all_time' = 'monthly'): Promise<UsageSummary> => {
+  getUsageSummary: async (period: 'day' | 'week' | 'month' = 'month'): Promise<any> => {
     const response = await apiClient.get('/api/v1/usage/summary', {
-      params: { user_id: userId, period }
+      params: { period }
     })
     return response.data
   },
@@ -361,9 +447,9 @@ export const apiService = {
     return response.data
   },
 
-  getUsageHistory: async (userId: string, limit = 50, offset = 0): Promise<any> => {
+  getUsageDashboard: async (limit = 10, offset = 0): Promise<any> => {
     const response = await apiClient.get('/api/v1/usage/dashboard', {
-      params: { user_id: userId, limit, offset }
+      params: { limit, offset }
     })
     return response.data
   },
@@ -393,11 +479,16 @@ export const apiService = {
     }
   },
 
-  // Unified models status endpoint (with optional user scoping)
-  getModelsStatus: async (userId?: string): Promise<any> => {
-    const response = await apiClient.get('/api/v1/models/status', {
-      params: userId ? { user_id: userId } : {}
+  getAllModels: async (): Promise<Model[]> => {
+    const response = await apiClient.get('/api/v1/models', {
+      params: { enabled_only: false }
     })
+    return response.data.models || []
+  },
+
+  // Unified models status endpoint (uses JWT authentication)
+  getModelsStatus: async (): Promise<any> => {
+    const response = await apiClient.get('/api/v1/models/status')
     return response.data
   },
 
@@ -449,44 +540,68 @@ export const apiService = {
   },
 
   // Provider API Keys endpoints
-  getProviderKeys: async (userId: string): Promise<any[]> => {
-    const response = await apiClient.get('/api/v1/api-keys', {
-      params: { user_id: userId }
-    })
+  getProviderKeys: async (): Promise<any[]> => {
+    const response = await apiClient.get('/api/v1/api-keys')
     return response.data.keys || []
   },
 
-  createProviderKey: async (userId: string, provider: string, apiKey: string, modelsEnabled: string[]): Promise<void> => {
-    await apiClient.post('/api/v1/api-keys', {
-      provider,
-      api_key: apiKey,
-      models_enabled: modelsEnabled
-    }, {
-      params: { user_id: userId }
-    })
-    
-    // Trigger model reload in AI service to sync the new API key
+  // Helper to initialize CSRF token (call this before making POST requests)
+  initCsrfToken: async (): Promise<void> => {
     try {
-      await apiClient.post('/api/v1/models/reload', null, {
-        params: { user_id: userId }
-      })
+      // Make a simple GET request to trigger CSRF token generation
+      await apiClient.get('/api/v1/api-keys')
     } catch (error) {
-      console.warn('Failed to reload models after API key update:', error)
+      console.warn('Failed to initialize CSRF token:', error)
     }
   },
 
-  deleteProviderKey: async (userId: string, provider: string): Promise<void> => {
-    await apiClient.delete(`/api/v1/api-keys/${provider}`, {
-      params: { user_id: userId }
-    })
-    
-    // Trigger model reload in AI service after deletion
+  createProviderKey: async (provider: string, apiKey: string, modelsEnabled: string[]): Promise<void> => {
     try {
-      await apiClient.post('/api/v1/models/reload', null, {
-        params: { user_id: userId }
+      // Ensure CSRF token is initialized before POST
+      if (!getCsrfToken()) {
+        await apiService.initCsrfToken()
+        // Wait a bit for cookie to be set
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+
+      await apiClient.post('/api/v1/api-keys', {
+        provider,
+        api_key: apiKey,
+        models_enabled: modelsEnabled
       })
+      
+      // Sync API keys to AI service (this will reload models automatically)
+      try {
+        await apiClient.post('/api/v1/api-keys/sync')
+      } catch (error) {
+        console.warn('Failed to sync API keys to backend:', error)
+      }
+    } catch (error: any) {
+      console.error('API Key Save Error:', error)
+      console.error('Error response:', error.response?.data)
+      console.error('Error status:', error.response?.status)
+      throw error
+    }
+  },
+
+  deleteProviderKey: async (provider: string): Promise<void> => {
+    await apiClient.delete(`/api/v1/api-keys/${provider}`)
+    
+    // Sync API keys to AI service after deletion (reload models)
+    try {
+      await apiClient.post('/api/v1/api-keys/sync')
     } catch (error) {
       console.warn('Failed to reload models after API key deletion:', error)
+    }
+  },
+
+  // Manually trigger API key sync to Python backend
+  syncApiKeys: async (): Promise<void> => {
+    try {
+      await apiClient.post('/api/v1/api-keys/sync')
+    } catch (error) {
+      console.warn('Failed to sync API keys:', error)
+      throw error
     }
   },
 

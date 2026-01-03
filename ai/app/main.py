@@ -130,26 +130,28 @@ app.add_middleware(
 # Exception handlers
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request, exc):
+    error_response = ErrorResponse(
+        error="HTTPException",
+        message=exc.detail,
+        details=str(exc)
+    )
     return JSONResponse(
         status_code=exc.status_code,
-        content=ErrorResponse(
-            error="HTTPException",
-            message=exc.detail,
-            details=str(exc)
-        ).dict()
+        content=error_response.model_dump(mode='json')
     )
 
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request, exc):
     logger.error(f"Unhandled exception: {str(exc)}")
+    error_response = ErrorResponse(
+        error="InternalServerError",
+        message="An unexpected error occurred",
+        details=str(exc) if settings.debug else None
+    )
     return JSONResponse(
         status_code=500,
-        content=ErrorResponse(
-            error="InternalServerError",
-            message="An unexpected error occurred",
-            details=str(exc) if settings.debug else None
-        ).dict()
+        content=error_response.model_dump(mode='json')
     )
 
 
@@ -305,6 +307,75 @@ async def reload_models(user_id: str = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/v1/models/sync-keys", tags=["Models"])
+async def sync_api_keys(request: dict):
+    """
+    Receive API keys directly from Go backend and update environment
+    This is called after a user adds/updates/deletes their API keys
+    """
+    try:
+        user_id = request.get("user_id")
+        api_keys = request.get("api_keys", {})
+        
+        logger.info(f"Syncing API keys for user {user_id}")
+        
+        # First, clear all provider API keys from environment
+        providers_to_clear = ["openai", "anthropic", "google", "cohere"]
+        for provider in providers_to_clear:
+            if provider == "openai":
+                if "OPENAI_API_KEY" in os.environ:
+                    del os.environ["OPENAI_API_KEY"]
+                settings.openai_api_key = None
+            elif provider == "anthropic":
+                if "ANTHROPIC_API_KEY" in os.environ:
+                    del os.environ["ANTHROPIC_API_KEY"]
+                settings.anthropic_api_key = None
+            elif provider == "google":
+                if "GOOGLE_API_KEY" in os.environ:
+                    del os.environ["GOOGLE_API_KEY"]
+                settings.google_api_key = None
+            elif provider == "cohere":
+                if "COHERE_API_KEY" in os.environ:
+                    del os.environ["COHERE_API_KEY"]
+                settings.cohere_api_key = None
+        
+        # Now set only the active API keys
+        for provider, api_key in api_keys.items():
+            provider_lower = provider.lower()
+            if provider_lower == "openai":
+                os.environ["OPENAI_API_KEY"] = api_key
+                settings.openai_api_key = api_key
+            elif provider_lower == "anthropic":
+                os.environ["ANTHROPIC_API_KEY"] = api_key
+                settings.anthropic_api_key = api_key
+            elif provider_lower == "google":
+                os.environ["GOOGLE_API_KEY"] = api_key
+                settings.google_api_key = api_key
+            elif provider_lower == "cohere":
+                os.environ["COHERE_API_KEY"] = api_key
+                settings.cohere_api_key = api_key
+            
+            logger.info(f"✓ Updated API key for {provider_lower}")
+        
+        # Reload model registry to reinitialize providers with new keys
+        model_registry.reload_config()
+        
+        statuses = model_registry.get_all_models_status()
+        available = sum(1 for s in statuses if s['status'] == 'available')
+        
+        logger.info(f"✓ Models reloaded: {available}/{len(statuses)} available")
+        
+        return {
+            "message": "API keys synced successfully",
+            "total_models": len(statuses),
+            "available": available,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Sync API keys failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/v1/models/{model_id}", response_model=ModelConfig, tags=["Models"])
 async def get_model(model_id: str):
     """Get details of a specific model"""
@@ -417,6 +488,152 @@ async def get_statistics():
         )),
         "timestamp": datetime.utcnow().isoformat()
     }
+
+
+@app.post("/api/v1/chat/completions", tags=["Chat"])
+async def chat_completion(request: dict):
+    """
+    Create a chat completion with agentic capabilities
+    
+    Supports:
+    - Multi-turn conversations
+    - Function calling and tool use
+    - Code execution
+    - Model selection
+    - Streaming responses (future)
+    """
+    try:
+        model_id = request.get("model", "gemini-2.5-pro")
+        messages = request.get("messages", [])
+        tools = request.get("tools", None)
+        temperature = request.get("temperature", 0.7)
+        max_tokens = request.get("max_tokens", 4096)
+        user_id = request.get("user_id")
+        
+        # Validate model
+        provider = model_registry.get_provider(model_id)
+        if not provider:
+            # Try to find first available model
+            available_models = model_registry.list_models(enabled_only=True)
+            if not available_models:
+                raise HTTPException(
+                    status_code=400,
+                    detail="No models available. Please configure your API keys."
+                )
+            model_id = available_models[0].id
+            provider = model_registry.get_provider(model_id)
+        
+        if not provider:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Model {model_id} is not available"
+            )
+        
+        # Build conversation prompt from messages
+        conversation = []
+        system_message = None
+        
+        for msg in messages:
+            role = msg.get("role")
+            content = msg.get("content", "")
+            
+            if role == "system":
+                system_message = content
+            elif role in ["user", "assistant"]:
+                conversation.append(f"{role.capitalize()}: {content}")
+        
+        # Combine conversation into a single prompt
+        prompt = "\n\n".join(conversation)
+        
+        # Check if provider supports function calling
+        provider_info = provider.get_info() if hasattr(provider, "get_info") else {}
+        supports_function_calling = provider_info.get("features", {}).get("function_calling", False)
+        supports_code_execution = provider_info.get("features", {}).get("code_execution", False)
+        
+        # Use native function calling for Gemini if available
+        if supports_function_calling and tools and hasattr(provider, "generate_with_tools"):
+            result = await provider.generate_with_tools(
+                prompt=prompt,
+                tools=tools,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                system_instruction=system_message
+            )
+        # Use code execution for Gemini if requested
+        elif supports_code_execution and request.get("enable_code_execution", False):
+            if hasattr(provider, "generate_with_code_execution"):
+                result = await provider.generate_with_code_execution(
+                    prompt=prompt,
+                    max_tokens=max_tokens,
+                    temperature=temperature
+                )
+            else:
+                result = await provider.generate(
+                    prompt=prompt,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    system_instruction=system_message
+                )
+        # Standard generation
+        else:
+            result = await provider.generate(
+                prompt=prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                system_instruction=system_message
+            )
+        
+        # Format response
+        response = {
+            "id": f"chatcmpl-{int(datetime.utcnow().timestamp())}",
+            "object": "chat.completion",
+            "created": int(datetime.utcnow().timestamp()),
+            "model": model_id,
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": result.get("content", "")
+                    },
+                    "finish_reason": result.get("finish_reason", "stop")
+                }
+            ],
+            "usage": result.get("usage", {
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0
+            })
+        }
+        
+        logger.info(f"Chat completion: model={model_id}, tokens={response['usage'].get('total_tokens', 0)}")
+        
+        return response
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        msg = str(e)
+        logger.error(f"Chat completion failed: {msg}")
+
+        # Cohere throttling typically shows up as "Please wait and try again later".
+        if "Please wait and try again later" in msg or "rate limit" in msg.lower():
+            raise HTTPException(
+                status_code=429,
+                detail="Upstream provider rate-limited this request. Please wait a bit and retry."
+            )
+
+        # Auth/Key issues
+        if "API key" in msg and ("not valid" in msg or "invalid" in msg.lower() or "authentication" in msg.lower()):
+            raise HTTPException(
+                status_code=401,
+                detail="Upstream provider rejected the API key. Verify the key and its permissions/credits."
+            )
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Chat completion failed: {msg}"
+        )
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
+	"lio-ai/internal/auth"
 	"lio-ai/internal/config"
 	"lio-ai/internal/db"
 	"lio-ai/internal/handlers"
@@ -20,6 +21,12 @@ func main() {
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
+	}
+
+	// Initialize JWT manager (must happen before handlers)
+	jwtManager, err := auth.NewJWTManager()
+	if err != nil {
+		log.Fatalf("Failed to initialize JWT manager: %v", err)
 	}
 
 	// Initialize database
@@ -42,20 +49,31 @@ func main() {
 	router.Use(middleware.CORSMiddleware())
 	router.Use(middleware.LoggingMiddleware())
 
+	// SECURITY: Add JWT auth middleware
+	router.Use(middleware.NewAuthMiddleware(jwtManager))
+
+	// SECURITY: Add CSRF protection middleware
+	router.Use(middleware.CSRFMiddleware())
+
 	// Rate limiting middleware
 	limiter := middleware.NewRateLimiter()
 	router.Use(middleware.RateLimitMiddleware(limiter))
 
-	// Initialize repositories, services, and handlers
+	// Initialize repositories
+	userRepo := repositories.NewUserRepository(database.GetConnection())
 	docRepo := repositories.NewDocumentRepository(database.GetConnection())
 	chatRepo := repositories.NewChatRepository(database.GetConnection())
 	usageRepo := repositories.NewUsageRepository(database.GetConnection())
 	providerKeyRepo := repositories.NewProviderKeyRepository(database.GetConnection())
 	
+	// Initialize services
+	userService := services.NewUserService(userRepo, jwtManager)
 	docService := services.NewDocumentService(docRepo)
 	chatService := services.NewChatService(chatRepo)
 	usageService := services.NewUsageService(usageRepo)
 	
+	// Initialize handlers
+	authHandler := handlers.NewAuthHandler(userService)
 	docHandler := handlers.NewDocumentHandler(docService)
 	chatHandler := handlers.NewChatHandler(chatService)
 	usageHandler := handlers.NewUsageHandler(usageService)
@@ -72,9 +90,10 @@ func main() {
 	// Root endpoint
 	router.GET("/", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
-			"message": "Welcome to Lio AI Gateway",
+			"message": "Welcome to Lio AI Gateway (Secured)",
 			"version": cfg.App.Version,
 			"status":  "operational",
+			"security": "jwt-enabled csrf-protected",
 		})
 	})
 
@@ -84,8 +103,18 @@ func main() {
 	// API routes
 	api := router.Group("/api/v1")
 	{
-		// Document routes
+		// SECURITY: Authentication routes (NO JWT required)
+		auth := api.Group("/auth")
+		{
+			auth.POST("/register", authHandler.Register)
+			auth.POST("/login", authHandler.Login)
+			auth.POST("/logout", middleware.RequireAuth(), authHandler.Logout)
+			auth.GET("/profile", middleware.RequireAuth(), authHandler.GetProfile)
+		}
+
+		// Document routes (JWT required)
 		documents := api.Group("/documents")
+		documents.Use(middleware.RequireAuth())
 		{
 			documents.POST("", docHandler.CreateDocument)
 			documents.GET("", docHandler.GetDocuments)
@@ -94,8 +123,9 @@ func main() {
 			documents.DELETE("/:id", docHandler.DeleteDocument)
 		}
 
-		// Chat routes
+		// Chat routes (JWT required)
 		chats := api.Group("/chats")
+		chats.Use(middleware.RequireAuth())
 		{
 			chats.POST("", chatHandler.CreateChat)
 			chats.GET("", chatHandler.GetUserChats)
@@ -111,8 +141,12 @@ func main() {
 			chats.GET("/uuid/:uuid/messages", chatHandler.GetMessagesByUUID)
 		}
 
-		// Usage routes
+		// Chat completion endpoint (JWT required)
+		api.POST("/chat/completions", middleware.RequireAuth(), chatHandler.ChatCompletion)
+
+		// Usage routes (JWT required)
 		usage := api.Group("/usage")
+		usage.Use(middleware.RequireAuth())
 		{
 			usage.GET("/quota", usageHandler.GetQuotaStatus)
 			usage.GET("/summary", usageHandler.GetUsageSummary)
@@ -121,26 +155,30 @@ func main() {
 			usage.GET("/dashboard", usageHandler.GetDashboard)
 		}
 
-		// System routes
+		// System routes (JWT required)
 		system := api.Group("/system")
+		system.Use(middleware.RequireAuth())
 		{
 			system.GET("/metrics", systemHandler.GetMetrics)
 			system.GET("/info", systemHandler.GetInfo)
 			system.GET("/stats", systemHandler.GetStats)
 		}
 
-		// Provider API Key routes
+		// Provider API Key routes (JWT required)
 		apiKeys := api.Group("/api-keys")
+		apiKeys.Use(middleware.RequireAuth())
 		{
 			apiKeys.GET("", providerKeyHandler.GetAllKeys)
 			apiKeys.POST("", providerKeyHandler.CreateOrUpdateKey)
+			apiKeys.POST("/sync", providerKeyHandler.SyncAllKeys)
 			apiKeys.DELETE("/:provider", providerKeyHandler.DeleteKey)
 			apiKeys.GET("/:provider", providerKeyHandler.GetProviderKey)
 		}
 	}
 
-	// Proxy routes for code generation service
+	// Proxy routes for code generation service (JWT required)
 	codeGen := router.Group("/api/v1/codegen")
+	codeGen.Use(middleware.RequireAuth())
 	{
 		codeGen.POST("/generate", func(c *gin.Context) {
 			proxyHandler.ProxyRequest(c)
@@ -153,13 +191,14 @@ func main() {
 		})
 	}
 
-	// Stats endpoint (separate from codegen)
-	router.GET("/api/v1/stats", func(c *gin.Context) {
+	// Stats endpoint (JWT required)
+	router.GET("/api/v1/stats", middleware.RequireAuth(), func(c *gin.Context) {
 		proxyHandler.ProxyRequest(c)
 	})
 
-	// Proxy routes for model management
+	// Proxy routes for model management (JWT required)
 	models := router.Group("/api/v1/models")
+	models.Use(middleware.RequireAuth())
 	{
 		models.GET("", func(c *gin.Context) {
 			proxyHandler.ProxyRequest(c)

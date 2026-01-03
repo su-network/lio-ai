@@ -52,6 +52,12 @@ export interface Model {
   badges?: string[]
   responseTime?: string
   status?: string
+  context_length?: number
+
+  // Availability/status support (from /api/v1/models/status)
+  availabilityStatus?: string
+  availabilityReason?: string | null
+  isActive?: boolean
 }
 
 export type ModelId = string

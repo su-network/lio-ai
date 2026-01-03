@@ -50,6 +50,21 @@ func NewDatabase(cfg *config.Config) (*Database, error) {
 // migrate runs database migrations
 func migrate(db *sql.DB) error {
 	schema := `
+	-- Users table for authentication
+	CREATE TABLE IF NOT EXISTS users (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		username VARCHAR(50) NOT NULL UNIQUE,
+		email VARCHAR(255) NOT NULL UNIQUE,
+		password_hash VARCHAR(255) NOT NULL,
+		full_name VARCHAR(255),
+		role VARCHAR(50) DEFAULT 'user',
+		is_active BOOLEAN DEFAULT 1,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+	CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+	CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+
 	CREATE TABLE IF NOT EXISTS documents (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		title VARCHAR(255) NOT NULL,

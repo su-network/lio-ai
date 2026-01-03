@@ -252,6 +252,139 @@ class GeminiProvider:
             # Fallback to standard generation
             return await self.generate(prompt, max_tokens, temperature)
     
+    async def generate_with_tools(
+        self,
+        prompt: str,
+        tools: List[Dict[str, Any]],
+        max_tokens: Optional[int] = None,
+        temperature: Optional[float] = None,
+        system_instruction: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Generate response with function calling/tool use
+        
+        Args:
+            prompt: The input prompt
+            tools: List of tool/function definitions
+            max_tokens: Maximum tokens to generate
+            temperature: Sampling temperature
+            system_instruction: System instruction for the model
+            
+        Returns:
+            Dict with 'content', 'usage', 'model', and optionally 'tool_calls' keys
+        """
+        if not self.use_native_sdk:
+            logger.warning("Native SDK not available for tools, falling back to standard generation")
+            return await self.generate(prompt, max_tokens, temperature, system_instruction)
+        
+        try:
+            # Convert OpenAI-style tool definitions to Gemini format
+            gemini_tools = self._convert_tools_to_gemini_format(tools)
+            
+            # Use native SDK for function calling
+            model = genai.GenerativeModel(
+                model_name=self.api_model_name,
+                generation_config={
+                    "temperature": temperature or self.config.get("temperature", 0.7),
+                    "max_output_tokens": max_tokens or self.config.get("max_output_tokens", 8192),
+                    "top_p": self.config.get("top_p", 0.95),
+                    "top_k": self.config.get("top_k", 40),
+                },
+                tools=gemini_tools,
+                system_instruction=system_instruction,
+            )
+            
+            response = model.generate_content(prompt)
+            
+            # Check if model wants to call a function
+            if response.candidates and response.candidates[0].content.parts:
+                parts = response.candidates[0].content.parts
+                
+                # Check for function calls
+                tool_calls = []
+                text_content = []
+                
+                for part in parts:
+                    if hasattr(part, 'function_call'):
+                        # Model wants to call a function
+                        tool_calls.append({
+                            "type": "function",
+                            "function": {
+                                "name": part.function_call.name,
+                                "arguments": dict(part.function_call.args)
+                            }
+                        })
+                    elif hasattr(part, 'text'):
+                        text_content.append(part.text)
+                
+                content = "\n".join(text_content) if text_content else ""
+                
+                result = {
+                    "content": content,
+                    "usage": {
+                        "prompt_tokens": 0,
+                        "completion_tokens": 0,
+                        "total_tokens": 0
+                    },
+                    "model": self.api_model_name,
+                    "finish_reason": "tool_calls" if tool_calls else "stop"
+                }
+                
+                if tool_calls:
+                    result["tool_calls"] = tool_calls
+                
+                return result
+            else:
+                # No function calls, just text
+                content = response.text if response.text else ""
+                
+                return {
+                    "content": content,
+                    "usage": {
+                        "prompt_tokens": 0,
+                        "completion_tokens": 0,
+                        "total_tokens": 0
+                    },
+                    "model": self.api_model_name,
+                    "finish_reason": "stop"
+                }
+            
+        except Exception as e:
+            logger.error(f"Tool-based generation failed: {str(e)}")
+            # Fallback to standard generation
+            return await self.generate(prompt, max_tokens, temperature, system_instruction)
+    
+    def _convert_tools_to_gemini_format(self, tools: List[Dict[str, Any]]) -> List:
+        """
+        Convert OpenAI-style tool definitions to Gemini format
+        
+        Args:
+            tools: List of OpenAI-style tool definitions
+            
+        Returns:
+            List of Gemini FunctionDeclaration objects
+        """
+        gemini_functions = []
+        
+        for tool in tools:
+            if tool.get("type") == "function":
+                func = tool.get("function", {})
+                
+                # Create Gemini FunctionDeclaration
+                function_declaration = genai.protos.FunctionDeclaration(
+                    name=func.get("name"),
+                    description=func.get("description", ""),
+                    parameters=func.get("parameters", {})
+                )
+                
+                gemini_functions.append(function_declaration)
+        
+        if gemini_functions:
+            return [genai.protos.Tool(function_declarations=gemini_functions)]
+        
+        return []
+
+    
     async def generate_streaming(
         self,
         prompt: str,

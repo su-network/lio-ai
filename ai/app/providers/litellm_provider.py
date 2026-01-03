@@ -4,6 +4,7 @@ from typing import Optional, Dict, Any, List
 import litellm
 from litellm import completion, acompletion
 import logging
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -92,78 +93,99 @@ class LiteLLMProvider:
         Returns:
             Dict with 'content', 'usage', and 'model' keys
         """
-        try:
-            # Prepare parameters
-            params = {
-                "model": self.litellm_model,
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": temperature or self.config.get("temperature", 0.7),
-            }
-            
-            # Handle max_tokens/max_output_tokens for different providers
-            max_token_value = max_tokens or self.config.get("max_output_tokens") or self.config.get("max_tokens", 2048)
-            
-            if self.provider == "google":
-                # Google uses max_output_tokens instead of max_tokens
-                params["max_output_tokens"] = max_token_value
-                
-                # Add Google-specific parameters
-                if "top_k" in self.config:
-                    params["top_k"] = self.config["top_k"]
-                if "top_p" in self.config:
-                    params["top_p"] = self.config["top_p"]
-                    
-                # Set safety settings for Gemini to be less restrictive for code generation
-                params["safety_settings"] = [
-                    {
-                        "category": "HARM_CATEGORY_HARASSMENT",
-                        "threshold": "BLOCK_NONE"
-                    },
-                    {
-                        "category": "HARM_CATEGORY_HATE_SPEECH",
-                        "threshold": "BLOCK_NONE"
-                    },
-                    {
-                        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                        "threshold": "BLOCK_NONE"
-                    },
-                    {
-                        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-                        "threshold": "BLOCK_NONE"
-                    }
-                ]
-            else:
-                params["max_tokens"] = max_token_value
-                
-                # Add provider-specific params
-                if "top_p" in self.config:
-                    params["top_p"] = self.config["top_p"]
-            
-            # Merge additional kwargs
-            params.update(kwargs)
-            
-            # Call LiteLLM
-            logger.debug(f"Calling LiteLLM with model: {self.litellm_model}, params: {params}")
-            response = await acompletion(**params)
-            
-            # Extract response
-            content = response.choices[0].message.content
-            usage = {
-                "prompt_tokens": response.usage.prompt_tokens,
-                "completion_tokens": response.usage.completion_tokens,
-                "total_tokens": response.usage.total_tokens
-            }
-            
-            return {
-                "content": content,
-                "usage": usage,
-                "model": self.litellm_model,
-                "finish_reason": response.choices[0].finish_reason
-            }
-            
-        except Exception as e:
-            logger.error(f"LiteLLM generation failed for {self.model_id}: {str(e)}")
-            raise Exception(f"Generation failed: {str(e)}")
+        # Cohere can intermittently return "Please wait and try again later".
+        # A small retry with backoff smooths over transient throttling.
+        max_attempts = 3 if self.provider == "cohere" else 1
+        last_error: Optional[Exception] = None
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                # Prepare parameters
+                params: Dict[str, Any] = {
+                    "model": self.litellm_model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": temperature or self.config.get("temperature", 0.7),
+                }
+
+                # Handle max_tokens/max_output_tokens for different providers
+                max_token_value = (
+                    max_tokens
+                    or self.config.get("max_output_tokens")
+                    or self.config.get("max_tokens", 2048)
+                )
+
+                if self.provider == "google":
+                    # Google uses max_output_tokens instead of max_tokens
+                    params["max_output_tokens"] = max_token_value
+
+                    # Add Google-specific parameters
+                    if "top_k" in self.config:
+                        params["top_k"] = self.config["top_k"]
+                    if "top_p" in self.config:
+                        params["top_p"] = self.config["top_p"]
+
+                    # Set safety settings for Gemini to be less restrictive for code generation
+                    params["safety_settings"] = [
+                        {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+                        {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+                        {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+                        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+                    ]
+                else:
+                    params["max_tokens"] = max_token_value
+
+                    # Add provider-specific params
+                    if "top_p" in self.config:
+                        params["top_p"] = self.config["top_p"]
+
+                # Merge additional kwargs
+                params.update(kwargs)
+
+                # Call LiteLLM
+                logger.debug(
+                    f"Calling LiteLLM with model: {self.litellm_model}, params: {params}"
+                )
+                response = await acompletion(**params)
+
+                # Extract response
+                content = response.choices[0].message.content
+                usage = {
+                    "prompt_tokens": response.usage.prompt_tokens,
+                    "completion_tokens": response.usage.completion_tokens,
+                    "total_tokens": response.usage.total_tokens,
+                }
+
+                return {
+                    "content": content,
+                    "usage": usage,
+                    "model": self.litellm_model,
+                    "finish_reason": response.choices[0].finish_reason,
+                }
+
+            except Exception as e:
+                last_error = e
+                msg = str(e)
+
+                is_transient_wait = (
+                    self.provider == "cohere"
+                    and "Please wait and try again later" in msg
+                    and attempt < max_attempts
+                )
+
+                if is_transient_wait:
+                    delay = 1.5 * attempt
+                    logger.warning(
+                        f"Cohere transient error for {self.model_id} (attempt {attempt}/{max_attempts}); retrying in {delay:.1f}s"
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+
+                logger.error(f"LiteLLM generation failed for {self.model_id}: {msg}")
+                raise Exception(f"Generation failed: {msg}")
+
+        raise Exception(
+            f"Generation failed: {str(last_error) if last_error else 'unknown error'}"
+        )
     
     async def health_check(self) -> bool:
         """

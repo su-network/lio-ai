@@ -237,9 +237,11 @@ models:
       temperature: 0.3
       top_p: 0.95
 
-  # Google Models
-  - id: gemini-2.5-pro
-    name: Gemini 2.5 Pro
+  # Google Gemini Models (Updated from official documentation)
+  # https://ai.google.dev/gemini-api/docs/models
+  
+  - id: gemini-2.0-flash-exp
+    name: Gemini 2.0 Flash (Experimental)
     provider: google
     model_name: gemini-2.0-flash-exp
     enabled: true
@@ -277,24 +279,21 @@ models:
         - flutter
       max_complexity: advanced
       special_features:
-        - ultra-long-context
         - multimodal
-        - code-analysis
+        - fast-generation
         - code-generation
+        - code-analysis
         - refactoring
         - debugging
-        - optimization
-        - testing
-        - documentation
-        - complex-reasoning
-        - real-time-processing
-      context_window: 1000000
+        - native-tool-use
+        - grounding
+      context_window: 1048576  # 1M tokens
       output_limit: 8192
     metrics:
-      average_latency_ms: 1500
+      average_latency_ms: 800
       success_rate: 0.99
-      cost_per_request: 0.005
-      requests_per_minute: 1000
+      cost_per_request: 0.0  # Free during preview
+      requests_per_minute: 1500
       uptime: 0.999
     config:
       temperature: 0.2
@@ -302,46 +301,10 @@ models:
       top_k: 40
       max_output_tokens: 8192
 
-  - id: gemini-pro
-    name: Gemini Pro
-    provider: google
-    model_name: gemini-pro
-    enabled: true
-    priority: 3
-    capabilities:
-      languages:
-        - python
-        - javascript
-        - typescript
-        - java
-        - go
-        - cpp
-      frameworks:
-        - fastapi
-        - express
-        - spring
-        - gin
-      max_complexity: advanced
-      special_features:
-        - multimodal
-        - code-understanding
-      context_window: 32768
-      output_limit: 8192
-    metrics:
-      average_latency_ms: 1800
-      success_rate: 0.96
-      cost_per_request: 0.001
-      requests_per_minute: 1000
-      uptime: 0.998
-    config:
-      temperature: 0.2
-      top_p: 0.95
-      top_k: 40
-
   - id: gemini-1.5-pro
     name: Gemini 1.5 Pro
     provider: google
-    model_name: gemini-1.5-pro
+    model_name: gemini-1.5-pro-latest
     enabled: true
     priority: 2
     capabilities:
@@ -353,24 +316,153 @@ models:
         - go
         - rust
         - cpp
+        - csharp
+        - ruby
+        - php
+        - swift
+        - kotlin
       frameworks:
         - fastapi
         - django
         - express
         - spring
         - gin
+        - react
+        - vue
+        - nextjs
       max_complexity: advanced
       special_features:
         - ultra-long-context
         - multimodal
         - code-analysis
-      context_window: 1000000
+        - code-execution
+        - function-calling
+        - json-mode
+      context_window: 2097152  # 2M tokens
       output_limit: 8192
     metrics:
-      average_latency_ms: 2200
+      average_latency_ms: 2000
+      success_rate: 0.98
+      cost_per_request: 0.00125  # Per 1K input tokens
+      requests_per_minute: 1000
+      uptime: 0.999
+    config:
+      temperature: 0.2
+      top_p: 0.95
+      top_k: 40
+      max_output_tokens: 8192
+
+  - id: gemini-1.5-flash
+    name: Gemini 1.5 Flash
+    provider: google
+    model_name: gemini-1.5-flash-latest
+    enabled: true
+    priority: 3
+    capabilities:
+      languages:
+        - python
+        - javascript
+        - typescript
+        - java
+        - go
+        - rust
+        - cpp
+      frameworks:
+        - fastapi
+        - express
+        - react
+        - gin
+        - spring
+      max_complexity: intermediate
+      special_features:
+        - fast-generation
+        - multimodal
+        - cost-effective
+        - code-generation
+        - function-calling
+      context_window: 1048576  # 1M tokens
+      output_limit: 8192
+    metrics:
+      average_latency_ms: 1200
       success_rate: 0.97
-      cost_per_request: 0.007
-      requests_per_minute: 600
+      cost_per_request: 0.000075  # Per 1K input tokens
+      requests_per_minute: 2000
+      uptime: 0.999
+    config:
+      temperature: 0.2
+      top_p: 0.95
+      top_k: 40
+      max_output_tokens: 8192
+
+  - id: gemini-1.5-flash-8b
+    name: Gemini 1.5 Flash-8B
+    provider: google
+    model_name: gemini-1.5-flash-8b-latest
+    enabled: true
+    priority: 4
+    capabilities:
+      languages:
+        - python
+        - javascript
+        - typescript
+        - java
+        - go
+      frameworks:
+        - fastapi
+        - express
+        - react
+        - gin
+      max_complexity: intermediate
+      special_features:
+        - ultra-fast-generation
+        - lower-cost
+        - high-volume-tasks
+        - code-generation
+      context_window: 1048576  # 1M tokens
+      output_limit: 8192
+    metrics:
+      average_latency_ms: 600
+      success_rate: 0.96
+      cost_per_request: 0.0000375  # Per 1K input tokens (lowest cost)
+      requests_per_minute: 4000
+      uptime: 0.999
+    config:
+      temperature: 0.3
+      top_p: 0.95
+      top_k: 40
+      max_output_tokens: 8192
+
+  - id: gemini-1.0-pro
+    name: Gemini 1.0 Pro
+    provider: google
+    model_name: gemini-1.0-pro-latest
+    enabled: true
+    priority: 5
+    capabilities:
+      languages:
+        - python
+        - javascript
+        - typescript
+        - java
+        - go
+        - cpp
+      frameworks:
+        - fastapi
+        - express
+        - spring
+        - gin
+      max_complexity: advanced
+      special_features:
+        - text-generation
+        - code-understanding
+        - function-calling
+      context_window: 32768
+      output_limit: 8192
+    metrics:
+      average_latency_ms: 1800
+      success_rate: 0.96
+      cost_per_request: 0.0005  # Per 1K input tokens
+      requests_per_minute: 1000
       uptime: 0.998
     config:
       temperature: 0.2
@@ -391,10 +483,19 @@ models:
         - typescript
         - java
         - go
+        - rust
+        - cpp
       frameworks:
         - fastapi
+        - django
+        - flask
         - express
         - spring
+        - gin
+        - echo
+        - nextjs
+        - react
+        - vue
       max_complexity: intermediate
       special_features:
         - retrieval-augmented
@@ -408,9 +509,125 @@ models:
       requests_per_minute: 800
       uptime: 0.997
     config:
+      temperature: 0.2
+      top_p: 0.75
+
+  - id: command-r
+    name: Command R
+    provider: cohere
+    model_name: command-r
+    enabled: true
+    priority: 3
+    capabilities:
+      languages:
+        - python
+        - javascript
+        - typescript
+        - java
+        - go
+        - rust
+        - cpp
+      frameworks:
+        - fastapi
+        - django
+        - flask
+        - express
+        - spring
+        - gin
+        - echo
+        - nextjs
+        - react
+        - vue
+      max_complexity: advanced
+      special_features:
+        - code-generation
+        - complex-reasoning
+        - refactoring
+        - debugging
+        - tool-use
+        - retrieval-augmented
+      context_window: 128000
+      output_limit: 4096
+    metrics:
+      average_latency_ms: 1400
+      success_rate: 0.95
+      cost_per_request: 0.004
+      requests_per_minute: 800
+      uptime: 0.997
+    config:
+      temperature: 0.2
+      top_p: 0.75
+
+  - id: command
+    name: Command
+    provider: cohere
+    model_name: command
+    enabled: true
+    priority: 4
+    capabilities:
+      languages:
+        - python
+        - javascript
+        - typescript
+        - java
+        - go
+      frameworks:
+        - fastapi
+        - flask
+        - express
+        - gin
+        - react
+        - vue
+      max_complexity: intermediate
+      special_features:
+        - code-generation
+        - code-explanation
+        - refactoring
+        - fast-generation
+      context_window: 32768
+      output_limit: 4096
+    metrics:
+      average_latency_ms: 1100
+      success_rate: 0.94
+      cost_per_request: 0.003
+      requests_per_minute: 1000
+      uptime: 0.996
+    config:
+      temperature: 0.2
+      top_p: 0.85
+
+  - id: command-light
+    name: Command Light
+    provider: cohere
+    model_name: command-light
+    enabled: true
+    priority: 5
+    capabilities:
+      languages:
+        - python
+        - javascript
+        - typescript
+      frameworks:
+        - fastapi
+        - flask
+        - express
+        - react
+        - vue
+      max_complexity: simple
+      special_features:
+        - fast-generation
+        - simple-tasks
+      context_window: 8192
+      output_limit: 2048
+    metrics:
+      average_latency_ms: 800
+      success_rate: 0.93
+      cost_per_request: 0.002
+      requests_per_minute: 1200
+      uptime: 0.995
+    config:
       temperature: 0.3
-      p: 0.75
-      k: 0
+      top_p: 0.9
 
 # Model selection strategies
 selection_strategies:

@@ -1,8 +1,11 @@
 package handlers
 
 import (
+	"bytes"
 	"encoding/json"
+	"log"
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	"lio-ai/internal/models"
@@ -21,13 +24,17 @@ func NewProviderKeyHandler(repo *repositories.ProviderKeyRepository) *ProviderKe
 
 // GetAllKeys gets all provider API keys for the current user
 func (h *ProviderKeyHandler) GetAllKeys(c *gin.Context) {
-	userID := c.Query("user_id")
-	if userID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id is required"})
+	// Get authenticated user from JWT token
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "authentication required",
+			"code":  "UNAUTHORIZED",
+		})
 		return
 	}
 
-	keys, err := h.repo.GetAllByUser(userID)
+	keys, err := h.repo.GetAllByUser(userID.(string))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch API keys"})
 		return
@@ -40,15 +47,29 @@ func (h *ProviderKeyHandler) GetAllKeys(c *gin.Context) {
 
 // CreateOrUpdateKey creates or updates a provider API key
 func (h *ProviderKeyHandler) CreateOrUpdateKey(c *gin.Context) {
-	var req models.ProviderAPIKeyRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	// Get authenticated user from JWT token
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "authentication required",
+			"code":  "UNAUTHORIZED",
+		})
 		return
 	}
 
-	userID := c.Query("user_id")
-	if userID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id is required"})
+	var req models.ProviderAPIKeyRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request: " + err.Error()})
+		return
+	}
+
+	// Validate required fields
+	if req.Provider == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "provider is required"})
+		return
+	}
+	if req.APIKey == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "api_key is required"})
 		return
 	}
 
@@ -60,16 +81,23 @@ func (h *ProviderKeyHandler) CreateOrUpdateKey(c *gin.Context) {
 	}
 
 	key := &models.ProviderAPIKey{
-		UserID:        userID,
+		UserID:        userID.(string),
 		Provider:      req.Provider,
 		APIKey:        req.APIKey,
 		ModelsEnabled: modelsJSON,
 	}
 
 	if err := h.repo.Create(key); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save API key"})
+		// Log the actual error for debugging
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to save API key",
+			"details": err.Error(),
+		})
 		return
 	}
+
+	// Notify Python backend to reload models with new API keys
+	go h.syncAPIKeysToBackend(userID.(string))
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":  "API key saved successfully",
@@ -77,20 +105,88 @@ func (h *ProviderKeyHandler) CreateOrUpdateKey(c *gin.Context) {
 	})
 }
 
-// DeleteKey soft deletes a provider API key
-func (h *ProviderKeyHandler) DeleteKey(c *gin.Context) {
-	provider := c.Param("provider")
-	userID := c.Query("user_id")
+// syncAPIKeysToBackend sends all user's API keys to Python backend
+func (h *ProviderKeyHandler) syncAPIKeysToBackend(userID string) {
+	backendURL := os.Getenv("BACKEND_URL")
+	if backendURL == "" {
+		backendURL = "http://localhost:8000"
+	}
 
-	if userID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id is required"})
+	// Fetch all active API keys for this user
+	keyResponses, err := h.repo.GetAllByUser(userID)
+	if err != nil {
+		log.Printf("Failed to fetch API keys for sync: %v", err)
 		return
 	}
 
-	if err := h.repo.Delete(userID, provider); err != nil {
+	// Build API keys map - need to fetch decrypted keys
+	apiKeys := make(map[string]string)
+	for _, keyResp := range keyResponses {
+		if keyResp.IsActive {
+			// Fetch the actual decrypted key
+			fullKey, err := h.repo.GetByUserAndProvider(userID, keyResp.Provider)
+			if err != nil {
+				log.Printf("Failed to fetch key for %s: %v", keyResp.Provider, err)
+				continue
+			}
+			if fullKey != nil {
+				apiKeys[fullKey.Provider] = fullKey.APIKey
+			}
+		}
+	}
+
+	// Send to Python backend
+	payload := map[string]interface{}{
+		"user_id":  userID,
+		"api_keys": apiKeys,
+	}
+
+	jsonData, _ := json.Marshal(payload)
+	resp, err := http.Post(
+		backendURL+"/api/v1/models/sync-keys",
+		"application/json",
+		bytes.NewBuffer(jsonData),
+	)
+
+	if err != nil {
+		log.Printf("Failed to sync API keys to backend: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 200 {
+		log.Printf("✓ API keys synced to Python backend for user %s", userID)
+	} else {
+		log.Printf("Failed to sync API keys: HTTP %d", resp.StatusCode)
+	}
+}
+
+// DeleteKey soft deletes a provider API key
+func (h *ProviderKeyHandler) DeleteKey(c *gin.Context) {
+	// Get authenticated user from JWT token
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "authentication required",
+			"code":  "UNAUTHORIZED",
+		})
+		return
+	}
+
+	provider := c.Param("provider")
+
+	if provider == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "provider is required"})
+		return
+	}
+
+	if err := h.repo.Delete(userID.(string), provider); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete API key"})
 		return
 	}
+
+	// Sync to Python backend to remove the provider
+	go h.syncAPIKeysToBackend(userID.(string))
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "API key deleted successfully",
@@ -142,15 +238,24 @@ func (h *ProviderKeyHandler) RestoreKey(c *gin.Context) {
 
 // GetProviderKey retrieves the decrypted API key for a provider (internal use)
 func (h *ProviderKeyHandler) GetProviderKey(c *gin.Context) {
-	provider := c.Param("provider")
-	userID := c.Query("user_id")
-
-	if userID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id is required"})
+	// Get authenticated user from JWT token
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "authentication required",
+			"code":  "UNAUTHORIZED",
+		})
 		return
 	}
 
-	key, err := h.repo.GetByUserAndProvider(userID, provider)
+	provider := c.Param("provider")
+
+	if provider == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "provider is required"})
+		return
+	}
+
+	key, err := h.repo.GetByUserAndProvider(userID.(string), provider)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch API key"})
 		return
@@ -162,10 +267,30 @@ func (h *ProviderKeyHandler) GetProviderKey(c *gin.Context) {
 	}
 
 	// Update last used
-	h.repo.UpdateLastUsed(userID, provider)
+	h.repo.UpdateLastUsed(userID.(string), provider)
 
 	c.JSON(http.StatusOK, gin.H{
 		"provider": key.Provider,
 		"api_key":  key.APIKey, // Only return decrypted key for internal use
+	})
+}
+
+// SyncAllKeys manually syncs all user's API keys to Python backend
+func (h *ProviderKeyHandler) SyncAllKeys(c *gin.Context) {
+	// Get authenticated user from JWT token
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "authentication required",
+			"code":  "UNAUTHORIZED",
+		})
+		return
+	}
+
+	// Trigger sync in background
+	go h.syncAPIKeysToBackend(userID.(string))
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "API keys sync triggered",
 	})
 }

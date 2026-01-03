@@ -1,4 +1,4 @@
-.PHONY: help build run run-bg stop logs deps test test-coverage fmt vet lint security clean db-reset all frontend-install frontend-dev frontend-build ai-install ai-dev ai-stop ai-logs dev start stop-all restart status
+.PHONY: help build run run-bg stop logs deps test test-coverage fmt vet lint security clean db-reset all frontend-install frontend-dev frontend-build ai-install ai-dev ai-stop ai-logs dev start stop-all restart status test-security
 
 # Root-level Makefile to manage all Lio AI services (Go Gateway + Python AI + Frontend)
 
@@ -49,8 +49,25 @@ logs: ## Tail the server log
 	@mkdir -p logs
 	tail -f $(LOG_FILE)
 
-deps: ## Download and verify Go dependencies
-	cd $(GO_DIR) && $(GOMOD) tidy && $(GOMOD) verify
+deps: ## Download and verify all dependencies (Go, Python, Frontend)
+	@echo "Checking and installing all dependencies..."
+	@echo "1. Go dependencies..."
+	cd $(GO_DIR) && $(GOMOD) download
+	@echo "2. Python AI dependencies..."
+	@if ! python3 -c "import uvicorn" 2>/dev/null; then \
+		echo "Installing Python dependencies..."; \
+		cd $(AI_DIR) && pip3 install -r requirements.txt; \
+	else \
+		echo "✓ Python dependencies already installed"; \
+	fi
+	@echo "3. Frontend dependencies..."
+	@if [ ! -d "$(FRONTEND_DIR)/node_modules" ]; then \
+		echo "Installing frontend dependencies..."; \
+		cd $(FRONTEND_DIR) && npm install; \
+	else \
+		echo "✓ Frontend dependencies already installed"; \
+	fi
+	@echo "✓ All dependencies ready"
 
 test: ## Run Go tests
 	cd $(GO_DIR) && $(GOTEST) -v ./...
@@ -86,6 +103,10 @@ frontend-install: ## Install frontend dependencies
 
 frontend-dev: ## Run frontend development server in background
 	@echo "Starting frontend dev server..."
+	@if [ ! -d "$(FRONTEND_DIR)/node_modules" ]; then \
+		echo "Installing frontend dependencies..."; \
+		cd $(FRONTEND_DIR) && npm install; \
+	fi
 	@cd $(FRONTEND_DIR) && npm run dev > /dev/null 2>&1 & echo $$! > $(ROOT_DIR)/frontend.pid
 	@sleep 2
 	@echo "Frontend started on http://localhost:3000 (PID: $$(cat $(ROOT_DIR)/frontend.pid))"
@@ -96,14 +117,18 @@ frontend-build: ## Build frontend for production
 # Python AI Service commands
 ai-install: ## Install Python AI service dependencies
 	@echo "Installing Python AI service dependencies..."
-	cd $(AI_DIR) && poetry install
+	cd $(AI_DIR) && pip3 install -r requirements.txt
 
 ai-dev: ## Run Python AI service in background
 	@echo "Starting Python AI service..."
 	@if [ -f $(AI_PID_FILE) ] && kill -0 $$(cat $(AI_PID_FILE)) 2>/dev/null; then \
 		echo "✓ AI service already running with PID $$(cat $(AI_PID_FILE))"; \
 	else \
-		cd $(AI_DIR) && nohup poetry run python -m app.main > $(ROOT_DIR)/$(AI_LOG_FILE) 2>&1 & PID=$$!; echo $$PID > $(ROOT_DIR)/$(AI_PID_FILE); \
+		if ! python3 -c "import uvicorn" 2>/dev/null; then \
+			echo "Installing Python dependencies..."; \
+			cd $(AI_DIR) && pip3 install -r requirements.txt; \
+		fi; \
+		cd $(AI_DIR) && nohup python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload > $(ROOT_DIR)/$(AI_LOG_FILE) 2>&1 & PID=$$!; echo $$PID > $(ROOT_DIR)/$(AI_PID_FILE); \
 		sleep 3; \
 		if kill -0 $$PID 2>/dev/null; then \
 			echo "✓ AI service started (PID: $$PID)"; \
@@ -154,14 +179,14 @@ start: build ai-dev ## Start all services (Go Gateway + Python AI)
 	@echo "Run 'make logs' to view Go Gateway logs"
 	@echo "Run 'make ai-logs' to view Python AI logs"
 
-dev: build ai-dev frontend-dev ## Run all services in development mode (Go + Python AI + Frontend)
+dev: deps build ai-dev frontend-dev ## Run all services in development mode (Go + Python AI + Frontend)
 	@echo "====================================="
 	@echo "Starting Lio AI Development Environment"
 	@echo "====================================="
 	@if [ -f $(PID_FILE) ] && kill -0 $$(cat $(PID_FILE)) 2>/dev/null; then \
 		echo "✓ Go Gateway already running with PID $$(cat $(PID_FILE))"; \
 	else \
-		set -a; [ -f $(ROOT_DIR)/.env ] && . $(ROOT_DIR)/.env; set +a; \
+		set -a; [ -f $(GO_DIR)/.env ] && . $(GO_DIR)/.env; set +a; \
 		mkdir -p logs; \
 		nohup $(BIN_PATH) >> $(ROOT_DIR)/$(LOG_FILE) 2>&1 & echo $$! > $(ROOT_DIR)/$(PID_FILE); \
 		sleep 2; \
@@ -171,7 +196,7 @@ dev: build ai-dev frontend-dev ## Run all services in development mode (Go + Pyt
 	@echo "====================================="
 	@echo "✓ Go Gateway:  http://localhost:8080"
 	@echo "✓ Python AI:   http://localhost:8000"
-	@echo "✓ Frontend:    http://localhost:3000"
+	@echo "✓ Frontend:    http://localhost:5173"
 	@echo "====================================="
 	@echo "Run 'make stop-all' to stop all services"
 
@@ -197,12 +222,21 @@ stop-all: stop ## Stop all services (Go Gateway + Python AI + Frontend)
 		rm -f $(FRONTEND_PID_FILE); \
 	fi
 	@-pkill -f "vite" 2>/dev/null && echo "✓ Stopped vite dev server" || true
+	@echo "Cleaning up any remaining processes..."
+	@-killall lio-ai 2>/dev/null && echo "✓ Killed all lio-ai processes" || true
+	@-lsof -ti:8080 | xargs kill -9 2>/dev/null && echo "✓ Freed port 8080" || true
+	@-lsof -ti:8000 | xargs kill -9 2>/dev/null && echo "✓ Freed port 8000" || true
+	@-lsof -ti:5173 | xargs kill -9 2>/dev/null && echo "✓ Freed port 5173" || true
 	@echo "====================================="
 	@echo "All services stopped"
 	@echo "====================================="
 
 restart: stop start ## Restart Go Gateway and Python AI service
 	@echo "Services restarted successfully"
+
+test-security: ## Run security tests
+	@echo "Running security tests..."
+	cd $(GO_DIR) && $(GOTEST) ./tests/... -v
 
 status: ## Show status of all services
 	@echo "====================================="
@@ -224,7 +258,7 @@ status: ## Show status of all services
 	@echo ""
 	@if [ -f $(FRONTEND_PID_FILE) ] && kill -0 $$(cat $(FRONTEND_PID_FILE)) 2>/dev/null; then \
 		echo "✓ Frontend:    RUNNING (PID: $$(cat $(FRONTEND_PID_FILE)))"; \
-		echo "  URL: http://localhost:3000"; \
+		echo "  URL: http://localhost:5173"; \
 	else \
 		echo "✗ Frontend:    STOPPED"; \
 	fi

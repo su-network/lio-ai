@@ -231,7 +231,7 @@ const formatDate = (dateString: string) => {
 const loadKeys = async () => {
   loading.value = true
   try {
-    keys.value = await apiService.getProviderKeys(userStore.userId)
+    keys.value = await apiService.getProviderKeys()
   } catch (error) {
     console.error('Failed to load API keys:', error)
   } finally {
@@ -252,7 +252,7 @@ const closeDeleteModal = () => {
 const handleDeleteConfirm = async () => {
   deleting.value = true
   try {
-    await apiService.deleteProviderKey(userStore.userId, providerToDelete.value)
+    await apiService.deleteProviderKey(providerToDelete.value)
     
     // Reload keys in settings
     await loadKeys()

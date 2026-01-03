@@ -4,15 +4,16 @@ import "time"
 
 // User represents a user in the system
 type User struct {
-	ID        int64     `json:"id"`
-	Username  string    `json:"username"`
-	Email     string    `json:"email"`
-	FullName  string    `json:"full_name,omitempty"`
-	APIKey    string    `json:"api_key,omitempty"`
-	IsActive  bool      `json:"is_active"`
-	Role      string    `json:"role"` // "admin", "user", "developer"
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID           int64     `json:"id"`
+	Username     string    `json:"username"`
+	Email        string    `json:"email"`
+	FullName     string    `json:"full_name,omitempty"`
+	APIKey       string    `json:"api_key,omitempty"`
+	PasswordHash string    `json:"-"` // Never expose in JSON
+	IsActive     bool      `json:"is_active"`
+	Role         string    `json:"role"` // "admin", "user", "developer"
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 // APIKey represents an API key for authentication
