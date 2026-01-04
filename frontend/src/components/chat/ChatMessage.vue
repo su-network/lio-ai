@@ -80,19 +80,30 @@
             >
               <Copy class="w-3.5 h-3.5" />
             </button>
-            <button
-              @click="$emit('edit-message', message)"
-              class="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-              title="Edit message"
-            >
-              <Edit class="w-3.5 h-3.5" />
-            </button>
           </div>
         </div>
       </div>
 
       <!-- Content Area -->
-      <div class="message-content">
+      <div class="message-content relative">
+        <!-- User message action buttons - Show on hover -->
+        <div v-if="message.role === 'user'" class="absolute -right-2 -top-2 flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            @click="$emit('edit-message', message)"
+            class="p-1.5 bg-white dark:bg-gray-600 text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 rounded-lg shadow-sm hover:shadow-md border border-gray-200 dark:border-gray-500 transition-all"
+            title="Edit message"
+          >
+            <Edit class="w-3.5 h-3.5" />
+          </button>
+          <button
+            @click="$emit('copy-message', message)"
+            class="p-1.5 bg-white dark:bg-gray-600 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white rounded-lg shadow-sm hover:shadow-md border border-gray-200 dark:border-gray-500 transition-all"
+            title="Copy message"
+          >
+            <Copy class="w-3.5 h-3.5" />
+          </button>
+        </div>
+        
         <!-- Code View -->
         <div v-if="viewMode === 'code' || !hasCodeBlock">
           <div 

@@ -10,6 +10,13 @@ import (
 // NewAuthMiddleware creates authentication middleware with JWT validation
 func NewAuthMiddleware(jwtManager *auth.JWTManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Skip auth validation for public auth endpoints (login, register)
+		// These endpoints should not validate tokens at all
+		if isPublicAuthEndpoint(c.Request.URL.Path) {
+			c.Next()
+			return
+		}
+
 		// Get token from Authorization header or cookie
 		token := ""
 
@@ -125,4 +132,20 @@ func RequireRole(requiredRoles ...string) gin.HandlerFunc {
 
 		c.Next()
 	}
+}
+
+// isPublicAuthEndpoint checks if the path is a public authentication endpoint
+// that should bypass auth validation completely
+func isPublicAuthEndpoint(path string) bool {
+	publicEndpoints := []string{
+		"/api/v1/auth/register",
+		"/api/v1/auth/login",
+	}
+
+	for _, endpoint := range publicEndpoints {
+		if strings.HasPrefix(path, endpoint) {
+			return true
+		}
+	}
+	return false
 }

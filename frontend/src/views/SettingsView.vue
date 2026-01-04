@@ -1,6 +1,34 @@
 <template>
   <div class="min-h-screen bg-gray-50 dark:bg-gray-900">
     <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <!-- Welcome Banner for New Users -->
+      <div v-if="showWelcome" class="mb-6 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl shadow-lg overflow-hidden">
+        <div class="px-8 py-6 flex items-start justify-between">
+          <div class="flex items-start gap-4">
+            <div class="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center flex-shrink-0">
+              <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/>
+              </svg>
+            </div>
+            <div class="flex-1">
+              <h3 class="text-xl font-bold text-white mb-2">Welcome to LioAI! 🎉</h3>
+              <p class="text-blue-100 text-sm leading-relaxed">
+                To start using AI models, add your API keys from providers like OpenAI, Anthropic, or Google Gemini. 
+                Click "Add API Key" below to get started.
+              </p>
+            </div>
+          </div>
+          <button
+            @click="dismissWelcome"
+            class="text-white/80 hover:text-white transition-colors p-1"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
       <!-- Page Header -->
       <div class="mb-8">
         <h1 class="text-4xl font-bold text-gray-900 dark:text-white mb-2">Settings</h1>
@@ -188,6 +216,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useChatStore } from '@/stores/chat'
 import { useToast } from '@/composables/useToast'
@@ -195,6 +224,7 @@ import { apiService } from '@/services/api'
 import ApiKeyModal from '@/components/ApiKeyModal.vue'
 import DeleteConfirmModal from '@/components/DeleteConfirmModal.vue'
 
+const route = useRoute()
 const userStore = useUserStore()
 const chatStore = useChatStore()
 const toast = useToast()
@@ -204,6 +234,13 @@ const showModal = ref(false)
 const showDeleteModal = ref(false)
 const providerToDelete = ref('')
 const deleting = ref(false)
+const showWelcome = ref(false)
+
+const dismissWelcome = () => {
+  showWelcome.value = false
+  // Store in localStorage to not show again
+  localStorage.setItem('welcome_dismissed', 'true')
+}
 
 const getProviderColor = (provider: string) => {
   const colors: Record<string, string> = {
@@ -303,6 +340,11 @@ const handleSaved = async () => {
 }
 
 onMounted(() => {
+  // Check if this is a new user (welcome=true in query params)
+  if (route.query.welcome === 'true' && !localStorage.getItem('welcome_dismissed')) {
+    showWelcome.value = true
+  }
+  
   loadKeys()
 })
 </script>

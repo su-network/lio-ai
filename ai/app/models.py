@@ -18,6 +18,7 @@ class ModelProvider(str, Enum):
     ANTHROPIC = "anthropic"
     GOOGLE = "google"
     COHERE = "cohere"
+    OLLAMA = "ollama"
     LOCAL = "local"
 
 

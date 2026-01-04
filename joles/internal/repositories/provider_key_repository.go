@@ -118,6 +118,7 @@ func (r *ProviderKeyRepository) Create(key *models.ProviderAPIKey) error {
 		ON CONFLICT(user_id, provider) DO UPDATE SET
 			api_key_encrypted = excluded.api_key_encrypted,
 			models_enabled = excluded.models_enabled,
+			is_active = 1,
 			updated_at = excluded.updated_at
 	`
 

@@ -93,6 +93,7 @@ async def lifespan(app: FastAPI):
     try:
         # Initialize services
         model_registry = ModelRegistry(settings.models_config_path)
+        await model_registry.initialize()
         prompt_manager = PromptManager(settings.prompts_config_path)
         code_gen_service = CodeGenerationService(model_registry, prompt_manager)
         
@@ -318,6 +319,12 @@ async def sync_api_keys(request: dict):
         api_keys = request.get("api_keys", {})
         
         logger.info(f"Syncing API keys for user {user_id}")
+        logger.info(f"🔍 DEBUG: Received {len(api_keys)} providers: {list(api_keys.keys())}")
+        for provider in api_keys:
+            key_value = api_keys[provider]
+            key_len = len(key_value) if key_value else 0
+            key_preview = key_value[:10] if key_value and len(key_value) > 10 else (key_value or "EMPTY")
+            logger.info(f"🔍 DEBUG: Provider '{provider}': length={key_len}, preview='{key_preview}...'")
         
         # First, clear all provider API keys from environment
         providers_to_clear = ["openai", "anthropic", "google", "cohere"]
@@ -333,6 +340,8 @@ async def sync_api_keys(request: dict):
             elif provider == "google":
                 if "GOOGLE_API_KEY" in os.environ:
                     del os.environ["GOOGLE_API_KEY"]
+                if "GEMINI_API_KEY" in os.environ:
+                    del os.environ["GEMINI_API_KEY"]
                 settings.google_api_key = None
             elif provider == "cohere":
                 if "COHERE_API_KEY" in os.environ:
@@ -350,7 +359,11 @@ async def sync_api_keys(request: dict):
                 settings.anthropic_api_key = api_key
             elif provider_lower == "google":
                 os.environ["GOOGLE_API_KEY"] = api_key
+                os.environ["GEMINI_API_KEY"] = api_key  # LiteLLM uses GEMINI_API_KEY
                 settings.google_api_key = api_key
+                logger.info(f"✓ Updated API key for google (length={len(api_key) if api_key else 0})")
+                logger.info(f"🔍 DEBUG: Verified env var GOOGLE_API_KEY length={len(os.environ.get('GOOGLE_API_KEY', ''))}")
+                logger.info(f"🔍 DEBUG: Verified env var GEMINI_API_KEY length={len(os.environ.get('GEMINI_API_KEY', ''))}")
             elif provider_lower == "cohere":
                 os.environ["COHERE_API_KEY"] = api_key
                 settings.cohere_api_key = api_key
@@ -616,18 +629,18 @@ async def chat_completion(request: dict):
         msg = str(e)
         logger.error(f"Chat completion failed: {msg}")
 
-        # Cohere throttling typically shows up as "Please wait and try again later".
-        if "Please wait and try again later" in msg or "rate limit" in msg.lower():
+        # Cohere rate limiting
+        if "Please wait and try again later" in msg or "rate limit" in msg.lower() or "too many requests" in msg.lower():
             raise HTTPException(
                 status_code=429,
-                detail="Upstream provider rate-limited this request. Please wait a bit and retry."
+                detail="The AI provider is rate-limiting requests. This typically happens with free/trial API keys. Please wait 30-60 seconds before retrying, or upgrade to a paid API tier for higher rate limits."
             )
 
         # Auth/Key issues
         if "API key" in msg and ("not valid" in msg or "invalid" in msg.lower() or "authentication" in msg.lower()):
             raise HTTPException(
                 status_code=401,
-                detail="Upstream provider rejected the API key. Verify the key and its permissions/credits."
+                detail="The API provider rejected your API key. Please verify the key is correct and has sufficient credits/permissions."
             )
 
         raise HTTPException(

@@ -78,11 +78,13 @@ func migrate(db *sql.DB) error {
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		user_id VARCHAR(255) NOT NULL,
 		title VARCHAR(255) NOT NULL,
+		chat_uuid VARCHAR(255),
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 	CREATE INDEX IF NOT EXISTS idx_chats_user_id ON chats(user_id);
 	CREATE INDEX IF NOT EXISTS idx_chats_updated_at ON chats(updated_at DESC);
+	CREATE UNIQUE INDEX IF NOT EXISTS idx_chats_uuid ON chats(chat_uuid);
 
 	CREATE TABLE IF NOT EXISTS messages (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -178,6 +180,24 @@ func migrate(db *sql.DB) error {
 	if _, err := db.Exec(schema); err != nil {
 		return err
 	}
+	
+	// Additional migrations for existing databases
+	// Add chat_uuid column if it doesn't exist
+	// Check if chat_uuid column exists
+	var chatUuidExists int
+	err := db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('chats') WHERE name='chat_uuid'").Scan(&chatUuidExists)
+	if err == nil && chatUuidExists == 0 {
+		log.Println("Adding chat_uuid column to chats table...")
+		_, err = db.Exec("ALTER TABLE chats ADD COLUMN chat_uuid VARCHAR(255)")
+		if err != nil {
+			log.Printf("Warning: Could not add chat_uuid column: %v", err)
+		} else {
+			// Create index for the new column
+			_, _ = db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_chats_uuid ON chats(chat_uuid)")
+			log.Println("✓ Added chat_uuid column and index")
+		}
+	}
+	
 	log.Println("✓ Database migrations completed")
 	return nil
 }

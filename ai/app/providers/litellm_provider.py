@@ -166,16 +166,22 @@ class LiteLLMProvider:
                 last_error = e
                 msg = str(e)
 
+                # Check for Cohere rate limiting or transient errors
                 is_transient_wait = (
                     self.provider == "cohere"
-                    and "Please wait and try again later" in msg
+                    and (
+                        "Please wait and try again later" in msg
+                        or "rate limit" in msg.lower()
+                        or "too many requests" in msg.lower()
+                    )
                     and attempt < max_attempts
                 )
 
                 if is_transient_wait:
-                    delay = 1.5 * attempt
+                    # Exponential backoff: 2s, 4s, 8s
+                    delay = 2.0 ** attempt
                     logger.warning(
-                        f"Cohere transient error for {self.model_id} (attempt {attempt}/{max_attempts}); retrying in {delay:.1f}s"
+                        f"Cohere rate limit/transient error for {self.model_id} (attempt {attempt}/{max_attempts}); retrying in {delay:.1f}s"
                     )
                     await asyncio.sleep(delay)
                     continue

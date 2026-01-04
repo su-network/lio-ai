@@ -29,7 +29,6 @@
           :key="message.id"
           :message="message"
           :selected-model="chatStore.selectedModel"
-          @edit-message="editMessage"
           @copy-message="copyMessage"
         />
 
@@ -50,11 +49,12 @@
 
       <ChatInput
         :is-typing="chatStore.isTyping"
-        :editing-message="editingMessage"
         :quick-prompts="[]"
         :placeholder="'Type your message...'"
+        :selected-model="chatStore.selectedModel"
+        :available-models="chatStore.availableModels"
+        :has-available-models="chatStore.availableModels.length > 0"
         @send-message="sendMessage"
-        @cancel-edit="cancelEdit"
       />
     </div>
   </div>
@@ -74,8 +74,6 @@ const route = useRoute()
 const chatStore = useChatStore()
 
 const messagesContainer = ref<HTMLElement | null>(null)
-const editingMessage = ref<Message | null>(null)
-const editContent = ref('')
 
 const scrollToBottom = () => {
   nextTick(() => {
@@ -88,30 +86,13 @@ const scrollToBottom = () => {
 watch(() => chatStore.messages, scrollToBottom, { deep: true })
 
 const sendMessage = (messageData: any) => {
-  if (editingMessage.value) {
-    const content = typeof messageData === 'string' ? messageData : messageData.content
-    chatStore.updateMessage(editingMessage.value.id, content)
-    editingMessage.value = null
-    editContent.value = ''
+  // Handle both string and object formats
+  if (typeof messageData === 'string') {
+    chatStore.sendMessage(messageData)
   } else {
-    // Handle both string and object formats
-    if (typeof messageData === 'string') {
-      chatStore.sendMessage(messageData)
-    } else {
-      // Send message with code generation metadata
-      chatStore.sendMessage(messageData.content, messageData)
-    }
+    // Send message with code generation metadata
+    chatStore.sendMessage(messageData.content, messageData)
   }
-}
-
-const editMessage = (message: Message) => {
-  editingMessage.value = message
-  editContent.value = message.content
-}
-
-const cancelEdit = () => {
-  editingMessage.value = null
-  editContent.value = ''
 }
 
 const copyMessage = (message: Message) => {

@@ -119,10 +119,14 @@ const handleLogin = async () => {
     try {
       const result = await userStore.login(email.value, password.value)
       if (!result.success) {
+        // Show detailed error message from the API
         error.value = result.error || 'Login failed'
+        console.error('Login failed:', result.error)
       }
-    } catch (err) {
-      error.value = 'An unexpected error occurred'
+    } catch (err: any) {
+      // Catch any unexpected errors not handled by the store
+      console.error('Unexpected login error:', err)
+      error.value = err.message || 'An unexpected error occurred. Please check the console for details.'
     } finally {
       isLoading.value = false
     }

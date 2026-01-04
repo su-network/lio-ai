@@ -103,22 +103,6 @@ func CSRFMiddleware() gin.HandlerFunc {
 	}
 }
 
-// isStatefulRequest checks if request modifies state
 func isStatefulRequest(method string) bool {
 	return method == "POST" || method == "PUT" || method == "DELETE" || method == "PATCH"
-}
-
-// isPublicAuthEndpoint checks if the path is a public authentication endpoint
-func isPublicAuthEndpoint(path string) bool {
-	publicEndpoints := []string{
-		"/api/v1/auth/register",
-		"/api/v1/auth/login",
-	}
-
-	for _, endpoint := range publicEndpoints {
-		if strings.HasPrefix(path, endpoint) {
-			return true
-		}
-	}
-	return false
 }

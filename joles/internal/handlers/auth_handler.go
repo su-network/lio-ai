@@ -25,7 +25,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	var req models.RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid request",
+			"error": "invalid request: " + err.Error(),
 			"code":  "INVALID_REQUEST",
 		})
 		return
@@ -36,10 +36,22 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		// Log the detailed error securely
 		log.Printf("[AUTH] Registration failed for %s: %v", req.Email, err)
 
-		// Return generic error to client
+		// Return specific error message to client
+		errorMessage := err.Error()
+		errorCode := "REGISTRATION_FAILED"
+		
+		// Map specific errors to user-friendly messages
+		if errorMessage == "email already registered" {
+			errorCode = "EMAIL_ALREADY_EXISTS"
+		} else if errorMessage == "username already taken" {
+			errorCode = "USERNAME_ALREADY_EXISTS"
+		} else if errorMessage == "password is too weak" || errorMessage == "password must be at least 8 characters long" {
+			errorCode = "WEAK_PASSWORD"
+		}
+		
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "registration failed",
-			"code":  "REGISTRATION_FAILED",
+			"error": errorMessage,
+			"code":  errorCode,
 		})
 		return
 	}

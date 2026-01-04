@@ -39,8 +39,17 @@ export const useUserStore = defineStore('user', () => {
         console.warn('Failed to sync API keys:', syncError)
         // Don't fail initialization if sync fails
       }
-    } catch (error) {
-      console.error('Failed to load user profile:', error)
+    } catch (error: any) {
+      // Clear invalid auth token cookie if we get a 401
+      if (error.status === 401) {
+        // Clear the invalid cookie by setting it with past expiration
+        document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;'
+        document.cookie = '_csrf=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;'
+        console.log('Cleared invalid auth token and CSRF cookies')
+      } else {
+        // Only log non-401 errors (401 is expected when not logged in)
+        console.error('Failed to load user profile:', error)
+      }
       // No valid cookie, user needs to log in
       isAuthenticated.value = false
       user.value = null
@@ -64,12 +73,27 @@ export const useUserStore = defineStore('user', () => {
         avatar: `https://api.dicebear.com/8.x/avataaars/svg?seed=${email}`
       }
       isAuthenticated.value = true
-      router.push('/')
+      // Redirect new users to settings page to add API keys
+      router.push('/settings?welcome=true')
       return { success: true }
     } catch (error: any) {
+      console.error('Registration error:', error)
+      const errorData = error.response?.data
+      let errorMessage = errorData?.error || error.message || 'Registration failed'
+      
+      // Add error code if available
+      if (errorData?.code) {
+        errorMessage += ` (${errorData.code})`
+      }
+      
+      // Add additional details if available
+      if (errorData?.details) {
+        errorMessage += ` - ${JSON.stringify(errorData.details)}`
+      }
+      
       return { 
         success: false, 
-        error: error.response?.data?.error || 'Registration failed' 
+        error: errorMessage
       }
     }
   }
@@ -91,9 +115,23 @@ export const useUserStore = defineStore('user', () => {
       router.push('/')
       return { success: true }
     } catch (error: any) {
+      console.error('Login error:', error)
+      const errorData = error.response?.data
+      let errorMessage = errorData?.error || error.message || 'Login failed'
+      
+      // Add error code if available
+      if (errorData?.code) {
+        errorMessage += ` (${errorData.code})`
+      }
+      
+      // Add additional details if available
+      if (errorData?.details) {
+        errorMessage += ` - ${JSON.stringify(errorData.details)}`
+      }
+      
       return { 
         success: false, 
-        error: error.response?.data?.error || 'Login failed' 
+        error: errorMessage
       }
     }
   }
@@ -104,6 +142,9 @@ export const useUserStore = defineStore('user', () => {
     } catch (error) {
       console.error('Logout error:', error)
     } finally {
+      // Clear the auth token cookie
+      document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;'
+      
       user.value = null
       isAuthenticated.value = false
       // Cookie will be cleared by the server on logout

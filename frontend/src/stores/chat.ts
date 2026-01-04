@@ -247,7 +247,12 @@ export const useChatStore = defineStore('chat', () => {
       content,
       created_at: new Date().toISOString()
     }
-    conversation.messages.push(tempUserMessage)
+    
+    // Trigger reactivity by replacing the conversations array
+    const convIndex = conversations.value.findIndex(c => c.chat_uuid === currentConversationUUID.value)
+    if (convIndex !== -1) {
+      conversations.value[convIndex].messages = [...conversations.value[convIndex].messages, tempUserMessage]
+    }
 
     isTyping.value = true
     error.value = null
@@ -261,9 +266,13 @@ export const useChatStore = defineStore('chat', () => {
       )
       
       // Replace temp message with saved one
-      const userMsgIndex = conversation.messages.findIndex(m => m.id === tempUserMessage.id)
-      if (userMsgIndex !== -1) {
-        conversation.messages[userMsgIndex] = savedUserMessage
+      if (convIndex !== -1) {
+        const userMsgIndex = conversations.value[convIndex].messages.findIndex(m => m.id === tempUserMessage.id)
+        if (userMsgIndex !== -1) {
+          const updatedMessages = [...conversations.value[convIndex].messages]
+          updatedMessages[userMsgIndex] = savedUserMessage
+          conversations.value[convIndex].messages = updatedMessages
+        }
       }
 
       // Call the chat completion API
@@ -290,19 +299,79 @@ export const useChatStore = defineStore('chat', () => {
           tokens: result.tokens,
           created_at: new Date().toISOString()
         }
-        conversation.messages.push(assistantMessage)
+        
+        // Trigger reactivity by replacing the messages array
+        const convIndexAssist = conversations.value.findIndex(c => c.chat_uuid === currentConversationUUID.value)
+        if (convIndexAssist !== -1) {
+          conversations.value[convIndexAssist].messages = [...conversations.value[convIndexAssist].messages, assistantMessage]
+        }
         
       } catch (apiError: any) {
         console.error('Chat completion error:', apiError)
-        // Create error response message
-        aiResponse = `I apologize, but I encountered an error while processing your request: ${apiError.message}
+        
+        // Get current model to check if it's Ollama
+        const currentModel = availableModels.value.find(m => m.id === selectedModel.value)
+        const isOllama = currentModel?.provider === 'ollama'
+        
+        // Check if it's a rate limit error (429)
+        const isRateLimitError = apiError.message?.includes('429') || 
+                                  apiError.message?.toLowerCase().includes('rate limit') ||
+                                  apiError.message?.toLowerCase().includes('too many requests')
+        
+        // Check if it's a timeout error
+        const isTimeout = apiError.code === 'ECONNABORTED' || apiError.message?.toLowerCase().includes('timeout')
+        
+        // Create appropriate error response message
+        if (isOllama && isTimeout) {
+          aiResponse = `I apologize, but the local Ollama model timed out. This can happen when:
+
+• The model is loading for the first time (can take 30-60 seconds)
+• Your computer is under heavy load
+• Ollama service is not running
+
+**Solutions:**
+1. Make sure Ollama is running: check if you see it in your system tray
+2. Try again - first requests are slower while the model loads into memory
+3. Try a smaller model like Phi3 (3.8B) instead of Llama3 (8.0B)
+4. Visit https://ollama.ai if you need to install Ollama
+
+Local models are free but require your computer's resources.`
+        } else if (isRateLimitError && !isOllama) {
+          aiResponse = `I apologize, but the ${getModelDisplayName(selectedModel.value)} model is currently rate-limited by the provider.
+
+This typically happens when:
+• You're using a free/trial API key with limited requests per minute
+• Too many requests were made in a short time period
+
+**Solutions:**
+1. Wait 30-60 seconds before sending another message
+2. Upgrade to a paid API tier for higher rate limits
+3. Try switching to a different model temporarily
+4. Use a local Ollama model (free, no API keys needed)
+
+The system will automatically retry with exponential backoff, but you may need to wait a bit before trying again.`
+        } else if (isOllama) {
+          aiResponse = `I apologize, but I encountered an error with the local Ollama model: ${apiError.message}
+
+**Troubleshooting for Ollama:**
+1. Make sure Ollama is installed and running on your computer
+2. Check if the model is downloaded: run 'ollama list' in terminal
+3. Download the model if needed: 'ollama pull ${currentModel?.model_name || selectedModel.value}'
+4. Visit https://ollama.ai for installation help
+
+Note: Ollama models are free and run locally - no API keys needed!`
+        } else {
+          aiResponse = `I apologize, but I encountered an error while processing your request: ${apiError.message}
 
 Please make sure:
-1. You have configured your API keys in Settings
+1. You have configured your API keys in Settings (not needed for Ollama models)
 2. The selected model (${getModelDisplayName(selectedModel.value)}) is available
 3. Your API key has sufficient credits
 
-You can check available models and configure API keys in the Settings page.`
+You can check available models and configure API keys in the Settings page.
+
+**Tip:** Try using a local Ollama model for free unlimited usage!`
+        }
         
         // Save error message as assistant response
         const errorMessage = await apiService.addMessage(
@@ -311,19 +380,30 @@ You can check available models and configure API keys in the Settings page.`
           aiResponse,
           usedModel
         )
-        conversation.messages.push(errorMessage)
+        
+        // Trigger reactivity by replacing the messages array
+        const convIndexError = conversations.value.findIndex(c => c.chat_uuid === currentConversationUUID.value)
+        if (convIndexError !== -1) {
+          conversations.value[convIndexError].messages = [...conversations.value[convIndexError].messages, errorMessage]
+        }
       }
 
       // Update conversation updated_at
-      conversation.updated_at = new Date().toISOString()
+      const convIndexFinal = conversations.value.findIndex(c => c.chat_uuid === currentConversationUUID.value)
+      if (convIndexFinal !== -1) {
+        conversations.value[convIndexFinal].updated_at = new Date().toISOString()
+      }
       
     } catch (err: any) {
       error.value = err.message || 'Failed to send message'
       console.error('Error sending message:', err)
       // Remove the temporary user message on error
-      const msgIndex = conversation.messages.findIndex(m => m.id === tempUserMessage.id)
-      if (msgIndex !== -1) {
-        conversation.messages.splice(msgIndex, 1)
+      const convIndexCleanup = conversations.value.findIndex(c => c.chat_uuid === currentConversationUUID.value)
+      if (convIndexCleanup !== -1) {
+        const msgIndex = conversations.value[convIndexCleanup].messages.findIndex(m => m.id === tempUserMessage.id)
+        if (msgIndex !== -1) {
+          conversations.value[convIndexCleanup].messages = conversations.value[convIndexCleanup].messages.filter(m => m.id !== tempUserMessage.id)
+        }
       }
     } finally {
       isTyping.value = false

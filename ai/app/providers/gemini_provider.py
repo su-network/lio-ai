@@ -34,10 +34,15 @@ class GeminiProvider:
         
         # Map internal model IDs to actual Gemini API names
         self.gemini_model_mapping = {
-            'gemini-2.5-pro': 'gemini-2.0-flash-exp',
-            'gemini-1.5-pro': 'gemini-1.5-pro-latest',
-            'gemini-1.5-pro-latest': 'gemini-1.5-pro-latest',
-            'gemini-pro': 'gemini-1.0-pro',
+            'gemini-2.5-pro': 'gemini-2.5-pro',
+            'gemini-2.5-flash': 'gemini-2.5-flash',
+            'gemini-2.0-flash-exp': 'gemini-2.0-flash-exp',
+            'gemini-1.5-pro': 'gemini-2.5-pro',  # 1.5-pro is deprecated, use 2.5-pro
+            'gemini-1.5-pro-latest': 'gemini-2.5-pro',
+            'gemini-1.5-flash': 'gemini-2.5-flash',  # 1.5-flash is deprecated, use 2.5-flash
+            'gemini-1.5-flash-8b': 'gemini-2.5-flash',
+            'gemini-1.0-pro': 'gemini-2.5-pro',
+            'gemini-pro': 'gemini-2.5-pro',
         }
         
         self.api_model_name = self._get_api_model_name()
@@ -65,8 +70,8 @@ class GeminiProvider:
             if internal_name in self.model_name or internal_name == self.model_id:
                 return api_name
         
-        # Default to model_name
-        return self.model_name.replace('gemini/', '').replace('gemini-', '')
+        # Default to model_name (strip gemini/ prefix if present, but keep gemini- prefix)
+        return self.model_name.replace('gemini/', '')
     
     def _get_safety_settings(self, mode: str = "permissive") -> List[Dict[str, str]]:
         """

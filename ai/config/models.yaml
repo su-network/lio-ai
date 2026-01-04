@@ -37,7 +37,9 @@ models:
         - laravel
       max_complexity: advanced
       special_features:
+        - code-generation
         - code-explanation
+        - code-analysis
         - refactoring
         - debugging
         - optimization
@@ -80,7 +82,9 @@ models:
         - spring
       max_complexity: advanced
       special_features:
+        - code-generation
         - code-explanation
+        - code-analysis
         - refactoring
         - complex-algorithms
       context_window: 8192
@@ -154,10 +158,13 @@ models:
         - spring
       max_complexity: advanced
       special_features:
+        - code-generation
         - long-context
         - complex-reasoning
         - code-analysis
         - refactoring
+        - vision
+        - multimodal
       context_window: 200000
       output_limit: 4096
     metrics:
@@ -191,8 +198,12 @@ models:
         - react
       max_complexity: advanced
       special_features:
+        - code-generation
         - balanced-performance
         - cost-effective
+        - code-analysis
+        - vision
+        - multimodal
       context_window: 200000
       output_limit: 4096
     metrics:
@@ -473,7 +484,7 @@ models:
   - id: command-r-plus
     name: Command R+
     provider: cohere
-    model_name: command-r-plus
+    model_name: command-r-plus-08-2024  # Updated model name (old command-r-plus deprecated)
     enabled: true
     priority: 2
     capabilities:
@@ -679,3 +690,131 @@ fallback:
     - gemini-pro
     - gpt-3.5-turbo
     - claude-3-haiku
+
+# Ollama - Local Models (No API key required)
+# Users can install Ollama on their device: https://ollama.ai
+# Then pull models: ollama pull llama3, ollama pull mistral, etc.
+ollama_models:
+  - id: llama3
+    name: Llama 3 (8B)
+    provider: ollama
+    model_name: llama3:latest
+    enabled: true
+    priority: 3
+    capabilities:
+      languages:
+        - python
+        - javascript
+        - typescript
+        - java
+        - go
+        - rust
+        - cpp
+        - csharp
+      frameworks:
+        - fastapi
+        - django
+        - flask
+        - gin
+        - express
+      special_features:
+        - code-generation
+        - code-analysis
+        - chat
+    temperature: 0.7
+    max_output_tokens: 4096
+    description: "Meta's Llama 3 running locally via Ollama - Fast and capable for most tasks"
+
+  - id: mistral
+    name: Mistral (7B)
+    provider: ollama
+    model_name: mistral:latest
+    enabled: true
+    priority: 3
+    capabilities:
+      languages:
+        - python
+        - javascript
+        - typescript
+        - java
+        - go
+      frameworks:
+        - fastapi
+        - express
+      special_features:
+        - code-generation
+        - code-analysis
+        - chat
+    temperature: 0.7
+    max_output_tokens: 4096
+    description: "Mistral AI's model running locally - Excellent for code and reasoning"
+
+  - id: codellama
+    name: Code Llama (13B)
+    provider: ollama
+    model_name: codellama:latest
+    enabled: true
+    priority: 2
+    capabilities:
+      languages:
+        - python
+        - javascript
+        - typescript
+        - java
+        - cpp
+        - go
+        - rust
+      frameworks:
+        - all
+      special_features:
+        - code-generation
+        - code-analysis
+        - code-completion
+    temperature: 0.2
+    max_output_tokens: 8192
+    description: "Meta's Code Llama - Specialized for coding tasks, runs locally"
+
+  - id: deepseek-coder
+    name: DeepSeek Coder (6.7B)
+    provider: ollama
+    model_name: deepseek-coder:latest
+    enabled: true
+    priority: 2
+    capabilities:
+      languages:
+        - python
+        - javascript
+        - typescript
+        - java
+        - cpp
+        - go
+        - rust
+        - csharp
+      frameworks:
+        - all
+      special_features:
+        - code-generation
+        - code-analysis
+        - code-completion
+        - code-review
+    temperature: 0.2
+    max_output_tokens: 8192
+    description: "DeepSeek Coder - Optimized for code generation, runs locally"
+
+  - id: phi3
+    name: Phi-3 Mini (3.8B)
+    provider: ollama
+    model_name: phi3:latest
+    enabled: true
+    priority: 4
+    capabilities:
+      languages:
+        - python
+        - javascript
+        - java
+      special_features:
+        - code-generation
+        - chat
+    temperature: 0.7
+    max_output_tokens: 4096
+    description: "Microsoft's Phi-3 - Small but capable model for quick responses"

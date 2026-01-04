@@ -267,10 +267,14 @@ const handleRegister = async () => {
       success.value = true
       // Router will auto-redirect after store update
     } else {
+      // Show detailed error message from the API
       error.value = result.error || 'Registration failed. Please try again.'
+      console.error('Registration failed:', result.error)
     }
   } catch (err: any) {
-    error.value = err.message || 'An unexpected error occurred. Please try again.'
+    // Catch any unexpected errors not handled by the store
+    console.error('Unexpected registration error:', err)
+    error.value = err.message || 'An unexpected error occurred. Please check the console for details.'
   } finally {
     isLoading.value = false
   }

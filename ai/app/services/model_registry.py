@@ -3,10 +3,12 @@ from typing import List, Dict, Optional, Union
 from app.models import ModelConfig, ModelProvider, ComplexityLevel
 from app.providers.litellm_provider import LiteLLMProvider
 from app.providers.gemini_provider import GeminiProvider, create_gemini_provider
+from app.providers.ollama_provider import OllamaProvider
 from app.config import settings
 import yaml
 import logging
 import os
+import asyncio
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -22,10 +24,18 @@ class ModelRegistry:
         self.selection_strategies: Dict = {}
         self.fallback_config: Dict = {}
         self.model_health_status: Dict[str, bool] = {}
-        self._load_config()
+        # Don't call _load_config here, call initialize() from async context
+    
+    async def initialize(self):
+        """Initialize the registry - must be called in async context"""
+        await self._load_config()
     
     def _check_api_key_available(self, provider: str) -> bool:
         """Check if API key is configured for a provider"""
+        # Ollama doesn't need an API key - it's local
+        if provider.lower() == 'ollama':
+            return True
+        
         key_mapping = {
             'openai': settings.openai_api_key,
             'anthropic': settings.anthropic_api_key,
@@ -41,13 +51,13 @@ class ModelRegistry:
         
         return has_key
     
-    def _load_config(self):
+    async def _load_config(self):
         """Load models configuration from YAML"""
         try:
             with open(self.config_path, 'r') as f:
                 config = yaml.safe_load(f)
             
-            # Load models
+            # Load regular models
             for model_data in config.get('models', []):
                 model_config = ModelConfig(**model_data)
                 self.models[model_config.id] = model_config
@@ -68,6 +78,9 @@ class ModelRegistry:
                     logger.info(f"⊘ Skipping {model_config.id} - no API key for {model_config.provider.value}")
                     self.model_health_status[model_config.id] = False
             
+            # Load Ollama models dynamically from local Ollama instance
+            await self._load_ollama_models()
+            
             # Load selection strategies
             self.selection_strategies = config.get('selection_strategies', {})
             
@@ -80,9 +93,134 @@ class ModelRegistry:
             logger.error(f"Failed to load model config: {str(e)}")
             raise
     
-    def _create_provider(self, model_config: ModelConfig) -> Optional[Union[LiteLLMProvider, GeminiProvider]]:
-        """Create provider instance - uses enhanced Gemini provider for Google models"""
+    async def _load_ollama_models(self):
+        """Dynamically load models from local Ollama instance"""
         try:
+            logger.info("Detecting Ollama models...")
+            available_models = await OllamaProvider.list_available_models()
+            
+            if not available_models:
+                logger.warning("No Ollama models detected. Install models with: ollama pull <model-name>")
+                return
+            
+            # Model-specific capabilities based on specialization
+            model_capabilities = {
+                "codegemma": {
+                    "languages": ["python", "javascript", "typescript", "java", "go", "rust", "cpp", "kotlin", "swift"],
+                    "frameworks": ["all"],
+                    "max_complexity": "advanced",
+                    "special_features": ["code-generation", "code-completion", "code-analysis", "refactoring", "debugging"],
+                    "context_window": 8192,
+                    "output_limit": 4096,
+                    "description": "🏆 Best for code: Google's code specialist with strong code understanding"
+                },
+                "qwen2.5-coder": {
+                    "languages": ["python", "javascript", "typescript", "java", "go", "rust", "cpp", "c", "php", "ruby"],
+                    "frameworks": ["all"],
+                    "max_complexity": "advanced",
+                    "special_features": ["code-generation", "code-completion", "code-analysis", "bug-fixing", "optimization"],
+                    "context_window": 32768,  # Qwen has large context
+                    "output_limit": 8192,
+                    "description": "🚀 Excellent for code: Alibaba's specialized coder with 32K context window"
+                },
+                "codellama": {
+                    "languages": ["python", "javascript", "typescript", "java", "cpp", "go", "rust", "bash"],
+                    "frameworks": ["all"],
+                    "max_complexity": "advanced",
+                    "special_features": ["code-generation", "code-infilling", "code-completion", "instruction-following"],
+                    "context_window": 16384,
+                    "output_limit": 4096,
+                    "description": "🔥 Meta's code specialist: Excellent for complex programming tasks"
+                },
+                "deepseek-coder": {
+                    "languages": ["python", "javascript", "typescript", "java", "cpp", "go", "rust", "c"],
+                    "frameworks": ["all"],
+                    "max_complexity": "advanced",
+                    "special_features": ["code-generation", "code-completion", "algorithm-design", "system-design"],
+                    "context_window": 16384,
+                    "output_limit": 4096,
+                    "description": "💎 Strong coder: DeepSeek's specialized model for programming"
+                },
+                "phi3": {
+                    "languages": ["python", "javascript", "typescript", "java", "go"],
+                    "frameworks": ["fastapi", "express", "gin", "django", "flask"],
+                    "max_complexity": "intermediate",
+                    "special_features": ["chat", "code-generation", "quick-answers"],
+                    "context_window": 4096,
+                    "output_limit": 2048,
+                    "description": "⚡ Fast & lightweight: Good for simple tasks and quick responses"
+                }
+            }
+            
+            # Default capabilities for unknown models
+            default_capabilities = {
+                "languages": ["python", "javascript", "typescript", "java", "go", "rust", "cpp"],
+                "frameworks": ["all"],
+                "max_complexity": "advanced",
+                "special_features": ["code-generation", "code-analysis", "chat"],
+                "context_window": 4096,
+                "output_limit": 4096,
+                "description": "General purpose coding model"
+            }
+            
+            # Create model configs for each detected model
+            for model_info in available_models:
+                model_id = model_info["id"]
+                
+                # Get model-specific capabilities or use defaults
+                capabilities_data = model_capabilities.get(model_id, default_capabilities).copy()
+                description = capabilities_data.pop("description", "General purpose model")
+                
+                # Set priority based on model type (code specialists get higher priority)
+                priority = 1 if "code" in model_id or model_id in ["codegemma", "qwen2.5-coder"] else 3
+                
+                # Create model config
+                model_config = ModelConfig(
+                    id=model_id,
+                    name=model_info["name"],
+                    provider=ModelProvider.OLLAMA,
+                    model_name=model_info["model_name"],
+                    enabled=True,
+                    priority=priority,
+                    capabilities=capabilities_data,
+                    metrics={
+                        "average_latency_ms": 0.0,
+                        "success_rate": 1.0,
+                        "cost_per_request": 0.0,  # Free!
+                        "requests_per_minute": 60,
+                        "uptime": 1.0
+                    },
+                    config={"description": description}  # Store description in config
+                )
+                
+                # Register the model
+                self.models[model_id] = model_config
+                
+                # Create provider
+                provider = self._create_provider(model_config)
+                if provider:
+                    self.providers[model_id] = provider
+                    logger.info(f"✓ Registered Ollama model: {model_info['name']} ({model_info['model_name']})")
+                else:
+                    logger.warning(f"✗ Failed to create provider for Ollama model: {model_id}")
+            
+            logger.info(f"Loaded {len(available_models)} Ollama models")
+            
+        except Exception as e:
+            logger.warning(f"Failed to load Ollama models: {str(e)}")
+    
+    def _create_provider(self, model_config: ModelConfig) -> Optional[Union[LiteLLMProvider, GeminiProvider, OllamaProvider]]:
+        """Create provider instance - uses enhanced Gemini provider for Google models, OllamaProvider for local models"""
+        try:
+            # Use Ollama provider for local models
+            if model_config.provider.value.lower() == 'ollama':
+                logger.info(f"Creating Ollama provider for {model_config.id}")
+                return OllamaProvider(
+                    model_id=model_config.id,
+                    model_name=model_config.model_name,
+                    config=model_config.config
+                )
+            
             # Use enhanced Gemini provider for Google models
             if model_config.provider == ModelProvider.GOOGLE:
                 logger.info(f"Creating enhanced Gemini provider for {model_config.id}")
@@ -280,9 +418,9 @@ class ModelRegistry:
                 self.model_health_status[model_id] = False
         return health_status
     
-    def reload_config(self):
+    async def reload_config(self):
         """Reload configuration from file"""
         self.models.clear()
         self.providers.clear()
-        self._load_config()
+        await self._load_config()
         logger.info("Configuration reloaded")

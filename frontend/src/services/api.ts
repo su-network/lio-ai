@@ -28,7 +28,7 @@ const apiClient = axios.create({
   // Use empty baseURL to make requests relative (go through Vite proxy in dev)
   // In production, set VITE_API_URL environment variable
   baseURL: import.meta.env.VITE_API_URL || '',
-  timeout: 30000,
+  timeout: 120000, // 120 seconds for local Ollama models (can be slow on first run)
   withCredentials: true, // Enable sending cookies with requests
   headers: {
     'Content-Type': 'application/json'
@@ -136,7 +136,15 @@ apiClient.interceptors.response.use(
     return response
   },
   (error) => {
-    if (error.response?.status === 401) {
+    // Don't redirect to login on 401 if we're already on login/register pages
+    // or if this is the profile initialization call (which is expected to fail when not logged in)
+    const currentPath = window.location.pathname
+    const isAuthPage = currentPath === '/login' || currentPath === '/register'
+    const isProfileCall = error.config?.url?.includes('/auth/profile')
+    
+    if (error.response?.status === 401 && !isAuthPage && !isProfileCall) {
+      // Clear invalid cookie
+      document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;'
       // Cookie expired or invalid - redirect to login
       window.location.href = '/login'
     }

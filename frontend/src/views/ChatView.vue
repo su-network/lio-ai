@@ -187,7 +187,6 @@
           :key="message.id"
           :message="message"
           :selected-model="chatStore.selectedModel"
-          @edit-message="editMessage"
           @copy-message="copyMessage"
         />
 
@@ -208,12 +207,12 @@
 
       <ChatInput
         :is-typing="chatStore.isTyping"
-        :editing-message="editingMessage"
         :quick-prompts="[]"
         :placeholder="'Type your message...'"
         :has-available-models="chatStore.availableModels.length > 0"
+        :selected-model="chatStore.selectedModel"
+        :available-models="chatStore.availableModels"
         @send-message="sendMessage"
-        @cancel-edit="cancelEdit"
       />
     </div>
   </div>
@@ -231,8 +230,6 @@ import { Bot, MessageSquare } from 'lucide-vue-next'
 const chatStore = useChatStore()
 
 const messagesContainer = ref<HTMLElement | null>(null)
-const editingMessage = ref<Message | null>(null)
-const editContent = ref('')
 
 // Modal state for delete confirmation
 const chatToDelete = ref<any>(null)
@@ -253,29 +250,12 @@ const scrollToBottom = () => {
 watch(() => chatStore.messages, scrollToBottom, { deep: true })
 
 const sendMessage = (messageData: any) => {
-  if (editingMessage.value) {
-    const content = typeof messageData === 'string' ? messageData : messageData.content
-    chatStore.updateMessage(editingMessage.value.id, content)
-    editingMessage.value = null
-    editContent.value = ''
+  // Handle both string and object formats
+  if (typeof messageData === 'string') {
+    chatStore.sendMessage(messageData)
   } else {
-    // Handle both string and object formats
-    if (typeof messageData === 'string') {
-      chatStore.sendMessage(messageData)
-    } else {
-      chatStore.sendMessage(messageData.content, messageData)
-    }
+    chatStore.sendMessage(messageData.content, messageData)
   }
-}
-
-const editMessage = (message: Message) => {
-  editingMessage.value = message
-  editContent.value = message.content
-}
-
-const cancelEdit = () => {
-  editingMessage.value = null
-  editContent.value = ''
 }
 
 const copyMessage = (message: Message) => {

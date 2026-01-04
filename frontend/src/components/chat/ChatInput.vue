@@ -1,27 +1,5 @@
 <template>
   <div class="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 px-2 sm:px-4 py-3 sm:py-4">
-    <div v-if="editingMessage" class="mb-3 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-      <div class="flex items-center justify-between mb-2">
-        <span class="text-sm font-medium text-yellow-800 dark:text-yellow-200">Editing message</span>
-        <button @click="cancelEdit" class="text-yellow-600 hover:text-yellow-800 dark:text-yellow-400 dark:hover:text-yellow-200">
-          <X class="w-4 h-4" />
-        </button>
-      </div>
-      <textarea
-        v-model="editContent"
-        class="w-full p-2 text-sm border border-yellow-300 dark:border-yellow-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-        rows="2"
-      ></textarea>
-      <div class="flex justify-end space-x-2 mt-2">
-        <button @click="cancelEdit" class="px-3 py-1 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">
-          Cancel
-        </button>
-        <button @click="saveEdit" class="px-3 py-1 text-sm bg-yellow-600 text-white rounded hover:bg-yellow-700">
-          Save
-        </button>
-      </div>
-    </div>
-
     <!-- Attached files indicator -->
     <div v-if="attachedFiles.length > 0" class="flex flex-wrap gap-2 mb-3 px-1">
       <div 
@@ -123,45 +101,58 @@
             <div class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Options</div>
             
             <!-- Web Search Toggle using Radix Switch -->
-            <div class="flex items-center justify-between py-2">
-              <Label class="flex items-center space-x-2 cursor-pointer">
+            <div class="flex items-center justify-between py-2" :class="{ 'opacity-50': !supportsWebSearch }">
+              <Label class="flex items-center space-x-2" :class="supportsWebSearch ? 'cursor-pointer' : 'cursor-not-allowed'">
                 <Globe class="w-4 h-4 text-gray-600 dark:text-gray-400" />
                 <span class="text-sm text-gray-900 dark:text-white">Web Search</span>
               </Label>
               <SwitchRoot
                 v-model:checked="webSearchEnabled"
-                class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors data-[state=checked]:bg-gray-800 data-[state=unchecked]:bg-gray-200 dark:data-[state=checked]:bg-gray-600 dark:data-[state=unchecked]:bg-gray-700"
+                :disabled="!supportsWebSearch"
+                class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors data-[state=checked]:bg-gray-800 data-[state=unchecked]:bg-gray-200 dark:data-[state=checked]:bg-gray-600 dark:data-[state=unchecked]:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <SwitchThumb
                   class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform data-[state=checked]:translate-x-6 data-[state=unchecked]:translate-x-1"
                 />
               </SwitchRoot>
             </div>
+            <p v-if="!supportsWebSearch" class="text-xs text-gray-500 dark:text-gray-400 -mt-1 mb-1">
+              Current model doesn't support web search
+            </p>
 
             <!-- Code Generation Toggle -->
-            <div class="flex items-center justify-between py-2">
-              <Label class="flex items-center space-x-2 cursor-pointer">
+            <div class="flex items-center justify-between py-2" :class="{ 'opacity-50': !supportsCodeGeneration }">
+              <Label class="flex items-center space-x-2" :class="supportsCodeGeneration ? 'cursor-pointer' : 'cursor-not-allowed'">
                 <Code class="w-4 h-4 text-gray-600 dark:text-gray-400" />
                 <span class="text-sm text-gray-900 dark:text-white">Code Generation</span>
               </Label>
               <SwitchRoot
                 v-model:checked="codeGenEnabled"
-                class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors data-[state=checked]:bg-blue-600 data-[state=unchecked]:bg-gray-200 dark:data-[state=checked]:bg-blue-500 dark:data-[state=unchecked]:bg-gray-700"
+                :disabled="!supportsCodeGeneration"
+                class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors data-[state=checked]:bg-blue-600 data-[state=unchecked]:bg-gray-200 dark:data-[state=checked]:bg-blue-500 dark:data-[state=unchecked]:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <SwitchThumb
                   class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform data-[state=checked]:translate-x-6 data-[state=unchecked]:translate-x-1"
                 />
               </SwitchRoot>
             </div>
+            <p v-if="!supportsCodeGeneration" class="text-xs text-gray-500 dark:text-gray-400 -mt-1 mb-1">
+              Current model doesn't support code generation
+            </p>
             
             <!-- Attach File -->
             <button
-              @click="$refs.fileInput.click(); showOptionsMenu = false"
-              class="flex items-center space-x-2 w-full py-2 px-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              @click="handleAttachClick"
+              :disabled="!supportsFileAttachment"
+              class="flex items-center space-x-2 w-full py-2 px-2 rounded transition-colors"
+              :class="supportsFileAttachment ? 'hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer' : 'opacity-50 cursor-not-allowed'"
             >
               <Paperclip class="w-4 h-4 text-gray-600 dark:text-gray-400" />
               <span class="text-sm text-gray-900 dark:text-white">Attach File</span>
             </button>
+            <p v-if="!supportsFileAttachment" class="text-xs text-gray-500 dark:text-gray-400 px-2 -mt-1">
+              Current model doesn't support file attachments
+            </p>
             <input 
               ref="fileInput" 
               type="file" 
@@ -215,7 +206,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, defineProps, defineEmits, onMounted, watch } from 'vue'
+import { ref, defineProps, defineEmits, onMounted, watch, computed } from 'vue'
 import { Send, X, Paperclip, Globe, Settings, Code } from 'lucide-vue-next'
 import { 
   PopoverRoot, 
@@ -226,20 +217,20 @@ import {
   SwitchThumb,
   Label
 } from 'radix-vue'
-import type { Message, QuickPrompt } from '@/types'
+import type { Message, QuickPrompt, Model } from '@/types'
 
 const props = defineProps<{
   isTyping: boolean
-  editingMessage: Message | null
   quickPrompts: QuickPrompt[]
   placeholder: string
   hasAvailableModels?: boolean
+  selectedModel?: string
+  availableModels?: Model[]
 }>()
 
-const emit = defineEmits(['sendMessage', 'cancelEdit', 'saveEdit', 'selectQuickPrompt'])
+const emit = defineEmits(['sendMessage', 'selectQuickPrompt'])
 
 const inputMessage = ref('')
-const editContent = ref('')
 const messageInput = ref<HTMLTextAreaElement>()
 const fileInput = ref<HTMLInputElement>()
 const webSearchEnabled = ref(false)
@@ -249,8 +240,36 @@ const selectedFramework = ref('react')
 const attachedFiles = ref<File[]>([])
 const showOptionsMenu = ref(false)
 
+// Compute model capabilities
+const currentModel = computed(() => {
+  if (!props.selectedModel || !props.availableModels) return null
+  return props.availableModels.find(m => m.id === props.selectedModel)
+})
+
+const supportsWebSearch = computed(() => {
+  const features = currentModel.value?.capabilities?.special_features || []
+  return features.includes('web-search') || features.includes('grounding')
+})
+
+const supportsCodeGeneration = computed(() => {
+  const features = currentModel.value?.capabilities?.special_features || []
+  return features.includes('code-generation') || features.includes('code-analysis')
+})
+
+const supportsFileAttachment = computed(() => {
+  const features = currentModel.value?.capabilities?.special_features || []
+  return features.includes('multimodal') || features.includes('file-upload') || features.includes('vision')
+})
+
 const toggleWebSearch = () => {
   webSearchEnabled.value = !webSearchEnabled.value
+}
+
+const handleAttachClick = () => {
+  if (supportsFileAttachment.value && fileInput.value) {
+    fileInput.value.click()
+    showOptionsMenu.value = false
+  }
 }
 
 const handleFileUpload = (event: Event) => {
@@ -300,15 +319,6 @@ const sendMessage = () => {
   if (messageInput.value) {
     messageInput.value.style.height = '48px'
   }
-}
-
-const cancelEdit = () => {
-  emit('cancelEdit')
-}
-
-const saveEdit = () => {
-  emit('saveEdit', editContent.value)
-  editContent.value = ''
 }
 
 const selectQuickPrompt = (prompt: QuickPrompt) => {

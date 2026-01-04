@@ -69,12 +69,28 @@
                     </svg>
                   </div>
                 </div>
+                <!-- Description for code models -->
+                <div v-if="(model.capabilities as any)?.description" class="text-xs text-gray-600 dark:text-gray-400 mb-2 line-clamp-1">
+                  {{ (model.capabilities as any).description }}
+                </div>
                 <div class="flex items-center gap-2 flex-wrap">
-                  <span v-if="model.provider" class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
-                    {{ model.provider }}
+                  <!-- Ollama models get special "Local" badge -->
+                  <span v-if="model.provider === 'ollama'" class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                    </svg>
+                    Local • Free
+                  </span>
+                  <!-- Cloud providers -->
+                  <span v-else-if="model.provider" class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
+                    {{ model.provider.charAt(0).toUpperCase() + model.provider.slice(1) }}
                   </span>
                   <span v-if="model.context_length" class="text-xs text-gray-500 dark:text-gray-400">
                     {{ formatContextLength(model.context_length) }}
+                  </span>
+                  <!-- Show special features badges for code models -->
+                  <span v-if="(model.capabilities as any)?.special_features?.includes('code-completion')" class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400">
+                    Code Expert
                   </span>
                 </div>
               </DropdownMenuItem>
@@ -265,7 +281,17 @@ const updateMaxTokens = (event: Event) => {
 
 const getModelDisplayName = (modelId: string): string => {
   const model = props.availableModels.find(m => m.id === modelId)
-  return model?.name || modelId
+  if (!model) return modelId
+  
+  // Include provider name if multiple providers exist
+  const providers = new Set(props.availableModels.map(m => m.provider).filter(Boolean))
+  if (providers.size > 1 && model.provider) {
+    // Capitalize provider name
+    const providerName = model.provider.charAt(0).toUpperCase() + model.provider.slice(1)
+    return `${model.name} • ${providerName}`
+  }
+  
+  return model.name || modelId
 }
 
 const isSelectedModelActive = computed(() => {
