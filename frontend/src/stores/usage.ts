@@ -21,7 +21,7 @@ export const useUsageStore = defineStore('usage', () => {
     try {
       loading.value = true
       error.value = null
-      quota.value = await apiService.getQuotaStatus(userId.value)
+      quota.value = await apiService.getQuotaStatus()
     } catch (err: any) {
       // Silently handle if quota not found for new users
       if (err.response?.status === 404 || err.response?.status === 500) {
@@ -37,10 +37,11 @@ export const useUsageStore = defineStore('usage', () => {
   }
 
   async function fetchUsageSummary(period: 'daily' | 'monthly' | 'all_time' = 'monthly') {
+    const apiPeriod = period === 'daily' ? 'day' : period === 'monthly' ? 'month' : 'month' as 'day' | 'week' | 'month'
     try {
       loading.value = true
       error.value = null
-      summary.value = await apiService.getUsageSummary(userId.value, period)
+      summary.value = await apiService.getUsageSummary(apiPeriod)
     } catch (err: any) {
       // Silently handle if no usage data for new users
       if (err.response?.status === 404 || err.response?.status === 500) {
@@ -59,7 +60,7 @@ export const useUsageStore = defineStore('usage', () => {
     try {
       loading.value = true
       error.value = null
-      const response = await apiService.getUsageHistory(userId.value, limit, offset)
+      const response = await apiService.getUsageDashboard(limit, offset)
       history.value = response.data || []
     } catch (err: any) {
       error.value = err.message || 'Failed to fetch usage history'
@@ -71,7 +72,7 @@ export const useUsageStore = defineStore('usage', () => {
 
   async function checkQuota(tokensNeeded: number, modelName: string) {
     try {
-      const response = await apiService.checkQuota(userId.value, tokensNeeded, modelName)
+      const response = await apiService.checkQuota(userId.value.toString(), tokensNeeded, modelName)
       return response.has_quota
     } catch (err: any) {
       error.value = err.message || 'Failed to check quota'
@@ -92,7 +93,7 @@ export const useUsageStore = defineStore('usage', () => {
   }) {
     try {
       await apiService.trackUsage({
-        user_id: userId.value,
+        user_id: userId.value.toString(),
         ...data
       })
     } catch (err: any) {

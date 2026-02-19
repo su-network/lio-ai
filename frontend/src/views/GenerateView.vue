@@ -70,7 +70,7 @@
                     ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
                     : 'border-gray-300 dark:border-gray-600 hover:border-blue-400 dark:hover:border-blue-500'
                 ]"
-                @click="$refs.fileInput.click()"
+                @click="fileInput?.click()"
               >
                 <Upload class="w-12 h-12 text-gray-400 mx-auto mb-4" />
                 <p class="text-gray-600 dark:text-gray-300 mb-2 font-medium">
@@ -122,7 +122,7 @@
                         <span>•</span>
                         <span>{{ file.type.toUpperCase() }}</span>
                         <span>•</span>
-                        <span>{{ formatDate(file.lastModified) }}</span>
+                        <span>{{ formatDate(file.lastModified || new Date()) }}</span>
                       </div>
                     </div>
                   </div>
@@ -765,6 +765,7 @@ const handleFiles = async (files: FileList) => {
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i]
+    if (!file) continue
 
     // Simulate upload progress
     for (let progress = 0; progress <= 100; progress += 10) {

@@ -251,7 +251,7 @@ export const useChatStore = defineStore('chat', () => {
     // Trigger reactivity by replacing the conversations array
     const convIndex = conversations.value.findIndex(c => c.chat_uuid === currentConversationUUID.value)
     if (convIndex !== -1) {
-      conversations.value[convIndex].messages = [...conversations.value[convIndex].messages, tempUserMessage]
+      conversations.value[convIndex]!.messages = [...conversations.value[convIndex]!.messages, tempUserMessage]
     }
 
     isTyping.value = true
@@ -267,11 +267,11 @@ export const useChatStore = defineStore('chat', () => {
       
       // Replace temp message with saved one
       if (convIndex !== -1) {
-        const userMsgIndex = conversations.value[convIndex].messages.findIndex(m => m.id === tempUserMessage.id)
+        const userMsgIndex = conversations.value[convIndex]!.messages.findIndex(m => m.id === tempUserMessage.id)
         if (userMsgIndex !== -1) {
-          const updatedMessages = [...conversations.value[convIndex].messages]
+          const updatedMessages = [...conversations.value[convIndex]!.messages]
           updatedMessages[userMsgIndex] = savedUserMessage
-          conversations.value[convIndex].messages = updatedMessages
+          conversations.value[convIndex]!.messages = updatedMessages
         }
       }
 
@@ -303,7 +303,7 @@ export const useChatStore = defineStore('chat', () => {
         // Trigger reactivity by replacing the messages array
         const convIndexAssist = conversations.value.findIndex(c => c.chat_uuid === currentConversationUUID.value)
         if (convIndexAssist !== -1) {
-          conversations.value[convIndexAssist].messages = [...conversations.value[convIndexAssist].messages, assistantMessage]
+          conversations.value[convIndexAssist]!.messages = [...conversations.value[convIndexAssist]!.messages, assistantMessage]
         }
         
       } catch (apiError: any) {
@@ -384,14 +384,14 @@ You can check available models and configure API keys in the Settings page.
         // Trigger reactivity by replacing the messages array
         const convIndexError = conversations.value.findIndex(c => c.chat_uuid === currentConversationUUID.value)
         if (convIndexError !== -1) {
-          conversations.value[convIndexError].messages = [...conversations.value[convIndexError].messages, errorMessage]
+          conversations.value[convIndexError]!.messages = [...conversations.value[convIndexError]!.messages, errorMessage]
         }
       }
 
       // Update conversation updated_at
       const convIndexFinal = conversations.value.findIndex(c => c.chat_uuid === currentConversationUUID.value)
       if (convIndexFinal !== -1) {
-        conversations.value[convIndexFinal].updated_at = new Date().toISOString()
+        conversations.value[convIndexFinal]!.updated_at = new Date().toISOString()
       }
       
     } catch (err: any) {
@@ -400,9 +400,9 @@ You can check available models and configure API keys in the Settings page.
       // Remove the temporary user message on error
       const convIndexCleanup = conversations.value.findIndex(c => c.chat_uuid === currentConversationUUID.value)
       if (convIndexCleanup !== -1) {
-        const msgIndex = conversations.value[convIndexCleanup].messages.findIndex(m => m.id === tempUserMessage.id)
+        const msgIndex = conversations.value[convIndexCleanup]!.messages.findIndex(m => m.id === tempUserMessage.id)
         if (msgIndex !== -1) {
-          conversations.value[convIndexCleanup].messages = conversations.value[convIndexCleanup].messages.filter(m => m.id !== tempUserMessage.id)
+          conversations.value[convIndexCleanup]!.messages = conversations.value[convIndexCleanup]!.messages.filter(m => m.id !== tempUserMessage.id)
         }
       }
     } finally {

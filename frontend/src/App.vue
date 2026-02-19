@@ -292,7 +292,7 @@
                   <div class="flex items-center space-x-2 mb-1">
                     <p class="text-sm font-medium text-gray-900 dark:text-white truncate">{{ chat.title }}</p>
                     <span 
-                      v-if="chatStore.currentConversationId === chat.id"
+                      v-if="chatStore.currentConversationUUID === chat.chat_uuid"
                       class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200"
                     >
                       Active
@@ -376,6 +376,21 @@ const toastService: ToastService = {
     if (toastRef.value) {
       toastRef.value.addToast({ type: 'warning', title, message })
     }
+  },
+  networkError: (operation: string) => {
+    if (toastRef.value) {
+      toastRef.value.addToast({ type: 'error', title: 'Network Error', message: `Failed to ${operation}. Please check your connection.` })
+    }
+  },
+  serviceUnavailable: (serviceName: string) => {
+    if (toastRef.value) {
+      toastRef.value.addToast({ type: 'error', title: 'Service Unavailable', message: `${serviceName} is currently unavailable. Please try again later.` })
+    }
+  },
+  noDataFound: (dataType: string) => {
+    if (toastRef.value) {
+      toastRef.value.addToast({ type: 'info', title: 'No Data', message: `No ${dataType} found.` })
+    }
   }
 }
 
@@ -407,7 +422,7 @@ const createNewChat = () => {
 
 // Start editing conversation inline
 const startEdit = (convo: any) => {
-  editingConvoId.value = convo.id
+  editingConvoId.value = convo.id.toString()
   editingTitle.value = convo.title
   nextTick(() => {
     if (editInput.value) {
@@ -420,7 +435,7 @@ const startEdit = (convo: any) => {
 // Save edited title
 const saveEdit = () => {
   if (editingTitle.value.trim() && editingConvoId.value) {
-    const conversation = chatStore.conversations.find(c => c.id === editingConvoId.value)
+    const conversation = chatStore.conversations.find(c => c.id.toString() === editingConvoId.value)
     if (conversation) {
       conversation.title = editingTitle.value.trim()
     }
@@ -447,9 +462,9 @@ const executeDelete = () => {
     if (index !== -1) {
       chatStore.conversations.splice(index, 1)
       // If deleted conversation was active, switch to another one or create new
-      if (chatStore.currentConversationId === deleteTarget.value.id) {
-        if (chatStore.conversations.length > 0) {
-          chatStore.selectConversation(chatStore.conversations[0].id)
+      if (chatStore.currentConversationUUID === deleteTarget.value.chat_uuid) {
+        if (chatStore.conversations.length > 0 && chatStore.conversations[0]?.chat_uuid) {
+          chatStore.selectConversation(chatStore.conversations[0].chat_uuid)
         } else {
           createNewChat()
         }

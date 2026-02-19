@@ -36,7 +36,7 @@
             :key="chat.id"
             :class="[
               'w-full rounded-lg transition-colors group',
-              chatStore.currentConversationId === chat.id
+              chatStore.currentConversationUUID === chat.chat_uuid
                 ? 'bg-blue-50 dark:bg-blue-900/20'
                 : 'hover:bg-gray-100 dark:hover:bg-gray-700'
             ]"

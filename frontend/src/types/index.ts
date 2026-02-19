@@ -40,7 +40,7 @@ export interface ModelConfig {
 export interface Model {
   id: string
   name: string
-  provider: 'openai' | 'anthropic' | 'google' | 'cohere' | 'mistral'
+  provider: 'openai' | 'anthropic' | 'google' | 'cohere' | 'mistral' | 'ollama'
   model_name: string
   enabled: boolean
   priority: number
